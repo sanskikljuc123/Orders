@@ -161,7 +161,7 @@ namespace Orders.E2E.Features
     await testRunner.WhenAsync("I order 2 of \"Book\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "When ");
 #line hidden
 #line 6
-    await testRunner.ThenAsync("I see the result \"Order Paidd\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Then ");
+    await testRunner.ThenAsync("I see the result \"Order Paid\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Then ");
 #line hidden
             }
             await this.ScenarioCleanupAsync();

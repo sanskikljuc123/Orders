@@ -36,7 +36,8 @@ jobs:
         with:
           name: test-results
           path: TestResults
-                - name: Upload Playwright artifacts
+
+      - name: Upload Playwright artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
