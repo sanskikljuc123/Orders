@@ -24,7 +24,7 @@ public static class TestEnvironment
         await _app.ResourceNotifications.WaitForResourceAsync("api", KnownResourceStates.Running).WaitAsync(timeout);
 
         ApiUrl = _app.GetEndpoint("api", "http").ToString();
-        _payment = _app.CreateHttpClient("payment");
+        _payment = _app.CreateHttpClient("payment", "http");
 
         await WaitUntilApiRespondsAsync();
 
