@@ -13,9 +13,11 @@ builder.Host.UseServiceProviderFactory(new AutofacServiceProviderFactory());
 builder.Host.ConfigureContainer<ContainerBuilder>(c =>
 {
     c.RegisterType<OrderStore>().SingleInstance();
+    c.RegisterType<OrderService>();
     c.RegisterType<CreateOrderValidator>().As<IValidator<CreateOrderRequest>>().SingleInstance();
 });
 builder.Services.AddFusionCache();
+
 var paymentUrl = builder.Configuration["Payment:BaseUrl"];
 if (!string.IsNullOrEmpty(paymentUrl))
     builder.Services.AddHttpClient<IPaymentClient, HttpPaymentClient>(c => c.BaseAddress = new Uri(paymentUrl));
@@ -30,16 +32,13 @@ app.UseStaticFiles();
 app.MapPost("/orders", async (
     CreateOrderRequest req,
     [FromServices] IValidator<CreateOrderRequest> validator,
-    [FromServices] IPaymentClient payment,
-    [FromServices] OrderStore store) =>
+    [FromServices] OrderService orders) =>
 {
     var result = await validator.ValidateAsync(req);
     if (!result.IsValid)
         return Results.ValidationProblem(result.ToDictionary());
 
-    var paid = await payment.ChargeAsync(req.Quantity * 10m);
-    var order = new Order(Guid.NewGuid(), req.ProductName, req.Quantity, paid ? "Paid" : "PaymentFailed");
-    store.Add(order);
+    var order = await orders.PlaceOrderAsync(req);
     return Results.Created($"/orders/{order.Id}", order);
 });
 
@@ -76,12 +75,13 @@ public class OrderStore
     public Order? Find(Guid id) => _orders.GetValueOrDefault(id);
 }
 
-// Placeholder: in Phase 2 this becomes an HTTP call to FakePaymentService.
 public interface IPaymentClient { Task<bool> ChargeAsync(decimal amount); }
+
 public class AlwaysApprovedPaymentClient : IPaymentClient
 {
     public Task<bool> ChargeAsync(decimal amount) => Task.FromResult(true);
 }
+
 public class HttpPaymentClient(HttpClient http) : IPaymentClient
 {
     public async Task<bool> ChargeAsync(decimal amount)
@@ -92,4 +92,5 @@ public class HttpPaymentClient(HttpClient http) : IPaymentClient
         return body?.Approved ?? false;
     }
 }
+
 public record ChargeResponse(bool Approved);
