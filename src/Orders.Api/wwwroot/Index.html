@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Orders</title></head>
+<body>
+  <h1>New order</h1>
+  <label>Product <input data-testid="product" id="product"></label>
+  <label>Quantity <input data-testid="quantity" id="quantity" type="number" value="1"></label>
+  <button data-testid="submit" id="submit">Place order</button>
+  <p data-testid="result" id="result"></p>
+  <script>
+    document.getElementById('submit').onclick = async () => {
+      const res = await fetch('/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productName: document.getElementById('product').value,
+          quantity: Number(document.getElementById('quantity').value)
+        })
+      });
+      const out = document.getElementById('result');
+      if (res.ok) { const o = await res.json(); out.textContent = 'Order ' + o.status; }
+      else { out.textContent = 'Validation error'; }
+    };
+  </script>
+</body>
+</html>
