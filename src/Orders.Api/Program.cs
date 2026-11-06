@@ -94,3 +94,5 @@ public class HttpPaymentClient(HttpClient http) : IPaymentClient
 }
 
 public record ChargeResponse(bool Approved);
+
+public partial class Program { }
