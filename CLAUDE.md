@@ -1,7 +1,6 @@
 # Project: Orders E2E / test platform (learning project)
 
-Owner is a BEGINNER with Playwright. Explain briefly and simply (Serbian is fine in chat,
-code/comments/docs in English). Prefer small steps over big dumps.
+Prefer small steps over big dumps.
 
 ## Golden rules
 1. **Run before you trust.** Never claim something works until you ran `dotnet build` and the
@@ -13,7 +12,7 @@ code/comments/docs in English). Prefer small steps over big dumps.
    write "UNVERIFIED ASSUMPTION" in its README.
 4. **One phase at a time.** Finish a phase, run the gate, commit, then ask before starting the next.
 
-## Stack (fixed by the owner)
+## Stack
 .NET 10 SDK (see global.json) | .NET Aspire (dev orchestration, E2E host) | xUnit 2.9 |
 Reqnroll (Gherkin) + Microsoft.Playwright | FakeItEasy | Testcontainers |
 Keycloak (auth) | Autofac 9 (DI) | FusionCache 2.5 | FluentValidation 12.1 | Serilog |

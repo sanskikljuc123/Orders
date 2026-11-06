@@ -1,3 +1,4 @@
+using System.Linq;
 using Nuke.Common;
 using Nuke.Common.IO;
 using Nuke.Common.Tooling;
@@ -11,8 +12,21 @@ class Build : NukeBuild
     [Parameter("Build configuration")]
     readonly string Configuration = "Debug";
 
+    string Version = "0.0.0-local";
+
     AbsolutePath Solution => RootDirectory / "Orders.slnx";
     AbsolutePath ResultsDir => RootDirectory / "TestResults";
+
+    Target ComputeVersion => _ => _
+        .Executes(() =>
+        {
+            DotNet("tool restore", RootDirectory);
+            var output = DotNet("tool run dotnet-gitversion /showvariable SemVer", RootDirectory);
+            Version = string.Join("", output
+                .Where(o => o.Type == OutputType.Std)
+                .Select(o => o.Text)).Trim();
+            Serilog.Log.Information("Version: {Version}", Version);
+        });
 
     Target Restore => _ => _
         .Executes(() =>
@@ -21,12 +35,13 @@ class Build : NukeBuild
         });
 
     Target Compile => _ => _
-        .DependsOn(Restore)
+        .DependsOn(Restore, ComputeVersion)
         .Executes(() =>
         {
             DotNetBuild(s => s
                 .SetProjectFile(Solution)
                 .SetConfiguration(Configuration)
+                .SetVersion(Version)
                 .EnableNoRestore());
         });
 
