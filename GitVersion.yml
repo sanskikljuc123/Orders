@@ -1,0 +1,3 @@
+# Minimal on purpose. Claude Code: check `dotnet gitversion` (or the NUKE GitVersion
+# attribute) for the installed major version and extend this file accordingly.
+next-version: 0.1.0

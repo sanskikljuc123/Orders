@@ -1,0 +1,35 @@
+<Project>
+  <!--
+    CENTRAL PACKAGE MANAGEMENT: the ONLY place where NuGet versions live.
+    .csproj files use <PackageReference Include="X" /> WITHOUT a Version.
+
+    Only versions the project owner explicitly chose are pinned below.
+    Everything in the TODO list must be added with `dotnet add package`,
+    then its resolved version moved here and verified (`dotnet restore` + `dotnet build`).
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Label="Chosen by project owner">
+    <PackageVersion Include="xunit" Version="2.9.2" />
+    <PackageVersion Include="FusionCache" Version="2.5.0" />
+    <PackageVersion Include="Autofac" Version="9.0.0" />
+    <PackageVersion Include="FluentValidation" Version="12.1.0" />
+  </ItemGroup>
+
+  <!--
+    TODO (verify each on NuGet, pin here, keep compatible with the rest):
+      Microsoft.Playwright            (browser install must match this version in CI)
+      Reqnroll.xUnit                  (must support xunit 2.9.x)
+      Reqnroll.Autofac                (Autofac integration, if used)
+      FakeItEasy
+      Testcontainers, Testcontainers.Keycloak
+      Aspire.Hosting.*, Aspire.Hosting.Testing, Aspire.Hosting.Keycloak
+      Serilog, Serilog.AspNetCore, Serilog sinks
+      Autofac.Extensions.DependencyInjection
+      Microsoft.NET.Test.Sdk, xunit.runner.visualstudio
+      Nuke.Common, GitVersion.Tool
+  -->
+</Project>
