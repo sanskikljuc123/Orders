@@ -13,6 +13,7 @@
   </PropertyGroup>
   <ItemGroup Label="Chosen by project owner">
     <PackageVersion Include="Aspire.Hosting.Keycloak" Version="13.6.4-preview.1.26523.11" />
+    <PackageVersion Include="Aspire.Hosting.Kubernetes" Version="13.6.4-preview.1.26523.11" />
     <PackageVersion Include="Aspire.Hosting.Testing" Version="13.6.4" />
     <PackageVersion Include="Autofac.Extensions.DependencyInjection" Version="11.0.2" />
     <PackageVersion Include="FakeItEasy" Version="9.0.1" />
