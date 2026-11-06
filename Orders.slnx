@@ -1,6 +1,8 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/FakePaymentService/FakePaymentService.csproj" />
     <Project Path="src/Orders.Api/Orders.Api.csproj" />
+    <Project Path="src/Orders.AppHost/Orders.AppHost.csproj" />
     <Project Path="src/Orders.Shared/Orders.Shared.csproj" />
   </Folder>
 </Solution>

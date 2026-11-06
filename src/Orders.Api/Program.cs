@@ -13,10 +13,14 @@ builder.Host.UseServiceProviderFactory(new AutofacServiceProviderFactory());
 builder.Host.ConfigureContainer<ContainerBuilder>(c =>
 {
     c.RegisterType<OrderStore>().SingleInstance();
-    c.RegisterType<AlwaysApprovedPaymentClient>().As<IPaymentClient>().SingleInstance();
     c.RegisterType<CreateOrderValidator>().As<IValidator<CreateOrderRequest>>().SingleInstance();
 });
 builder.Services.AddFusionCache();
+var paymentUrl = builder.Configuration["Payment:BaseUrl"];
+if (!string.IsNullOrEmpty(paymentUrl))
+    builder.Services.AddHttpClient<IPaymentClient, HttpPaymentClient>(c => c.BaseAddress = new Uri(paymentUrl));
+else
+    builder.Services.AddSingleton<IPaymentClient, AlwaysApprovedPaymentClient>();
 
 var app = builder.Build();
 app.UseSerilogRequestLogging();
@@ -78,3 +82,14 @@ public class AlwaysApprovedPaymentClient : IPaymentClient
 {
     public Task<bool> ChargeAsync(decimal amount) => Task.FromResult(true);
 }
+public class HttpPaymentClient(HttpClient http) : IPaymentClient
+{
+    public async Task<bool> ChargeAsync(decimal amount)
+    {
+        var res = await http.PostAsJsonAsync("/charge", new { amount });
+        if (!res.IsSuccessStatusCode) return false;
+        var body = await res.Content.ReadFromJsonAsync<ChargeResponse>();
+        return body?.Approved ?? false;
+    }
+}
+public record ChargeResponse(bool Approved);
