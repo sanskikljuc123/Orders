@@ -137,6 +137,27 @@ public class StackFixture : WebApplicationFactory<Program>, IAsyncLifetime
 public class OrdersDatabaseTests(StackFixture fixture) { ... }
 ```
 
+- **A fake on a shared fixture is shared state.** `IClassFixture`/`ICollectionFixture` live
+  across tests, so a `.Returns(false)` set in one test leaks into the next and makes results
+  depend on run order. Reset it at the start of every test class constructor:
+
+  ```csharp
+  [Collection("Stack")]
+  public class OrdersDatabaseTests
+  {
+      private readonly StackFixture _fixture;
+
+      public OrdersDatabaseTests(StackFixture fixture)
+      {
+          _fixture = fixture;
+          Fake.ClearConfiguration(fixture.Payment);   // no behaviour left over from another test
+          Fake.ClearRecordedCalls(fixture.Payment);   // MustHaveHappened only sees this test's calls
+      }
+  }
+  ```
+  Each test then configures exactly the behaviour it needs. This only works because tests in
+  one collection run sequentially; if a fixture's tests can run in parallel, don't share a fake —
+  give each test its own factory or a per-test fake.
 - Pin container image tags (`postgres:17`, `keycloak:26.x`), never `latest`.
 - Tests sharing a container must use unique data (`$"Book-{Guid.NewGuid():N}"`) and must not
   assert on global counts ("list has 3 items") — assert `Contains` / `DoesNotContain` on own data.
