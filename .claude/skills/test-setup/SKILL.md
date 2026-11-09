@@ -40,6 +40,7 @@ Then load the references:
 | Unit / integration / fakes / CI / reference stack | `references/dotnet.md` |
 | E2E: feature files, steps, page objects, hooks, Playwright | `references/gherkin-e2e.md` |
 | HTTP APIs and service-to-service contracts (Pact) | `references/api-and-contracts.md` |
+| A test is flaky / "fix flaky tests" | `references/flaky-tests.md` |
 
 ## Step 2 — Identify the public contract and what would hurt
 
