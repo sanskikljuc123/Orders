@@ -26,8 +26,12 @@ public class ScenarioHooks(ScenarioBrowser sb, ScenarioContext scenario)
     [BeforeScenario]
     public async Task OpenBrowser()
     {
-        sb.Context = await TestEnvironment.Browser.NewContextAsync(
-            new BrowserNewContextOptions { BaseURL = TestEnvironment.ApiUrl });
+         var token = await TestEnvironment.GetAccessTokenAsync();
+        sb.Context = await TestEnvironment.Browser.NewContextAsync(new BrowserNewContextOptions
+        {
+            BaseURL = TestEnvironment.ApiUrl,
+            ExtraHTTPHeaders = new Dictionary<string, string> { ["Authorization"] = $"Bearer {token}" }
+        });
 
         await sb.Context.Tracing.StartAsync(new TracingStartOptions
         {

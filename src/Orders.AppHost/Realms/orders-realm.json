@@ -1,0 +1,29 @@
+{
+  "realm": "orders",
+  "enabled": true,
+  "sslRequired": "none",
+  "clients": [
+    {
+      "clientId": "orders-web",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "redirectUris": ["*"],
+      "webOrigins": ["*"]
+    }
+  ],
+  "users": [
+    {
+      "username": "ana",
+      "enabled": true,
+      "email": "ana@example.com",
+      "emailVerified": true,
+      "firstName": "Ana",
+      "lastName": "Test",
+      "credentials": [
+        { "type": "password", "value": "ana123", "temporary": false }
+      ]
+    }
+  ]
+}

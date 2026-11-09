@@ -12,6 +12,7 @@ public static class TestEnvironment
 
     public static IBrowser Browser { get; private set; } = default!;
     public static string ApiUrl { get; private set; } = default!;
+    public static string KeycloakUrl { get; private set; } = default!;
 
     public static async Task StartAsync()
     {
@@ -19,8 +20,10 @@ public static class TestEnvironment
         _app = await builder.BuildAsync();
         await _app.StartAsync();
 
-        var timeout = TimeSpan.FromMinutes(3);
+        var timeout = TimeSpan.FromMinutes(5);
         await _app.ResourceNotifications.WaitForResourceAsync("payment", KnownResourceStates.Running).WaitAsync(timeout);
+        await _app.ResourceNotifications.WaitForResourceHealthyAsync("keycloak").WaitAsync(timeout);
+        KeycloakUrl = _app.GetEndpoint("keycloak", "http").ToString().TrimEnd('/');
         await _app.ResourceNotifications.WaitForResourceAsync("api", KnownResourceStates.Running).WaitAsync(timeout);
 
         ApiUrl = _app.GetEndpoint("api", "http").ToString();
@@ -42,6 +45,22 @@ public static class TestEnvironment
         if (Browser is not null) await Browser.CloseAsync();
         _playwright?.Dispose();
         if (_app is not null) await _app.DisposeAsync();
+    }
+    public static async Task<string> GetAccessTokenAsync()
+    {
+          using var http = new HttpClient();
+          var res = await http.PostAsync(
+              $"{KeycloakUrl}/realms/orders/protocol/openid-connect/token",
+              new FormUrlEncodedContent(new Dictionary<string, string>
+              {
+                  ["grant_type"] = "password",
+                  ["client_id"] = "orders-web",
+                  ["username"] = "ana",
+                  ["password"] = "ana123"
+              }));
+          res.EnsureSuccessStatusCode();
+          using var doc = System.Text.Json.JsonDocument.Parse(await res.Content.ReadAsStringAsync());
+          return doc.RootElement.GetProperty("access_token").GetString()!;
     }
 
     public static async Task SetPaymentModeAsync(string mode)

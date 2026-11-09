@@ -1,6 +1,7 @@
 using Autofac;
 using Autofac.Extensions.DependencyInjection;
 using FluentValidation;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using System.Collections.Concurrent;
@@ -24,25 +25,50 @@ if (!string.IsNullOrEmpty(paymentUrl))
 else
     builder.Services.AddSingleton<IPaymentClient, AlwaysApprovedPaymentClient>();
 
+var authority = builder.Configuration["Auth:Authority"];
+var authEnabled = !string.IsNullOrEmpty(authority);
+if (authEnabled)
+{
+    builder.Services
+        .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(o =>
+        {
+            o.Authority = authority;
+            o.RequireHttpsMetadata = false; // dev Keycloak runs on plain http
+            o.TokenValidationParameters.ValidateAudience = false;
+        });
+    builder.Services.AddAuthorization();
+}
+
 var app = builder.Build();
 app.UseSerilogRequestLogging();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-app.MapPost("/orders", async (
+if (authEnabled)
+{
+    app.UseAuthentication();
+    app.UseAuthorization();
+}
+
+var orders = app.MapGroup("/orders");
+if (authEnabled)
+    orders.RequireAuthorization();
+
+orders.MapPost("", async (
     CreateOrderRequest req,
     [FromServices] IValidator<CreateOrderRequest> validator,
-    [FromServices] OrderService orders) =>
+    [FromServices] OrderService orderService) =>
 {
     var result = await validator.ValidateAsync(req);
     if (!result.IsValid)
         return Results.ValidationProblem(result.ToDictionary());
 
-    var order = await orders.PlaceOrderAsync(req);
+    var order = await orderService.PlaceOrderAsync(req);
     return Results.Created($"/orders/{order.Id}", order);
 });
 
-app.MapGet("/orders/{id:guid}", async (
+orders.MapGet("/{id:guid}", async (
     Guid id,
     [FromServices] OrderStore store,
     [FromServices] IFusionCache cache) =>
