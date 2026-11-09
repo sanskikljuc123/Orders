@@ -81,9 +81,16 @@ public void Quantity_outside_1_to_100_is_rejected(int quantity)
 
     var error = Assert.Single(result.Errors);
     Assert.Equal(nameof(CreateOrderRequest.Quantity), error.PropertyName);
+    Assert.Equal("InclusiveBetweenValidator", error.ErrorCode);              // which rule failed
+    Assert.Equal($"'Quantity' must be between 1 and 100. You entered {quantity}.", error.ErrorMessage);
 }
 ```
-  (FluentValidation also has `TestValidate(...).ShouldHaveValidationErrorFor(x => x.Quantity)`.)
+  - Assert the property, the rule (`ErrorCode`) **and** the message the user/caller will see.
+  - The message above is illustrative: copy the exact text from a real test run (or the
+    validator's `.WithMessage(...)`), never from memory — default texts can change between
+    FluentValidation versions. If messages are custom, assert the custom text.
+  - FluentValidation's helper does the same in one line:
+    `_validator.TestValidate(req).ShouldHaveValidationErrorFor(x => x.Quantity).WithErrorCode("InclusiveBetweenValidator").WithErrorMessage(...)`.
 - Time: inject `TimeProvider` and use `FakeTimeProvider` (Microsoft.Extensions.TimeProvider.Testing)
   instead of `DateTime.Now`.
 - Interaction checks (`MustHaveHappenedOnceExactly`) only when the call *is* the contract
