@@ -46,6 +46,11 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
 - Use `playwright-cli` + its skills (`playwright-cli install --skills`) to explore the live UI
   BEFORE writing selectors.
 
+## Git
+- Commit messages and PR descriptions: no AI attribution. No `Co-Authored-By: Claude ...`,
+  no `Claude-Session: ...` links, no "Generated with Claude Code" lines.
+- Ask before pushing.
+
 ## Build / CI / deploy
 - NUKE (`build/`) is the single entry point: Restore, Compile, Test, Publish, Helm.
   GitHub Actions only calls `./build.sh` / `./build.cmd`.
