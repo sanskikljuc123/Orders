@@ -24,6 +24,17 @@
       "credentials": [
         { "type": "password", "value": "ana123", "temporary": false }
       ]
+    },
+    {
+      "username": "bob",
+      "enabled": true,
+      "email": "bob@example.com",
+      "emailVerified": true,
+      "firstName": "Bob",
+      "lastName": "Test",
+      "credentials": [
+        { "type": "password", "value": "bob123", "temporary": false }
+      ]
     }
   ]
 }

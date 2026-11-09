@@ -11,12 +11,17 @@ if (builder.ExecutionContext.IsPublishMode)
 var keycloak = builder.AddKeycloak("keycloak", 8080)
     .WithRealmImport("Realms");
 
+var postgres = builder.AddPostgres("postgres");
+var ordersDb = postgres.AddDatabase("ordersdb");
+
 var payment = builder.AddProject<Projects.FakePaymentService>("payment");
 
 builder.AddProject<Projects.Orders_Api>("api")
+    .WithReference(ordersDb)
     .WithEnvironment("Payment__BaseUrl", payment.GetEndpoint("http"))
     .WithEnvironment("Auth__Authority",
         ReferenceExpression.Create($"{keycloak.GetEndpoint("http")}/realms/orders"))
+    .WaitFor(ordersDb)
     .WaitFor(payment)
     .WaitFor(keycloak)
     .WithExternalHttpEndpoints();

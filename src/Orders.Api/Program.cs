@@ -1,10 +1,11 @@
+using System.Security.Claims;
 using Autofac;
 using Autofac.Extensions.DependencyInjection;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
-using System.Collections.Concurrent;
 using ZiggyCreatures.Caching.Fusion;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,7 +14,6 @@ builder.Host.UseSerilog((ctx, lc) => lc.WriteTo.Console());
 builder.Host.UseServiceProviderFactory(new AutofacServiceProviderFactory());
 builder.Host.ConfigureContainer<ContainerBuilder>(c =>
 {
-    c.RegisterType<OrderStore>().SingleInstance();
     c.RegisterType<OrderService>();
     c.RegisterType<CreateOrderValidator>().As<IValidator<CreateOrderRequest>>().SingleInstance();
 });
@@ -24,6 +24,18 @@ if (!string.IsNullOrEmpty(paymentUrl))
     builder.Services.AddHttpClient<IPaymentClient, HttpPaymentClient>(c => c.BaseAddress = new Uri(paymentUrl));
 else
     builder.Services.AddSingleton<IPaymentClient, AlwaysApprovedPaymentClient>();
+
+var connectionString = builder.Configuration.GetConnectionString("ordersdb");
+var dbEnabled = !string.IsNullOrEmpty(connectionString);
+if (dbEnabled)
+{
+    builder.Services.AddDbContext<OrdersDbContext>(o => o.UseNpgsql(connectionString));
+    builder.Services.AddScoped<IOrderRepository, EfOrderRepository>();
+}
+else
+{
+    builder.Services.AddSingleton<IOrderRepository, OrderStore>();
+}
 
 var authority = builder.Configuration["Auth:Authority"];
 var authEnabled = !string.IsNullOrEmpty(authority);
@@ -41,6 +53,13 @@ if (authEnabled)
 }
 
 var app = builder.Build();
+
+if (dbEnabled)
+{
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<OrdersDbContext>().Database.MigrateAsync();
+}
+
 app.UseSerilogRequestLogging();
 app.UseDefaultFiles();
 app.UseStaticFiles();
@@ -57,6 +76,7 @@ if (authEnabled)
 
 orders.MapPost("", async (
     CreateOrderRequest req,
+    ClaimsPrincipal user,
     [FromServices] IValidator<CreateOrderRequest> validator,
     [FromServices] OrderService orderService) =>
 {
@@ -64,18 +84,25 @@ orders.MapPost("", async (
     if (!result.IsValid)
         return Results.ValidationProblem(result.ToDictionary());
 
-    var order = await orderService.PlaceOrderAsync(req);
+    var order = await orderService.PlaceOrderAsync(req, UserIds.Get(user));
     return Results.Created($"/orders/{order.Id}", order);
 });
 
+orders.MapGet("", async (
+    ClaimsPrincipal user,
+    [FromServices] IOrderRepository repo) =>
+    Results.Ok(await repo.ListAsync(UserIds.Get(user))));
+
 orders.MapGet("/{id:guid}", async (
     Guid id,
-    [FromServices] OrderStore store,
+    ClaimsPrincipal user,
+    [FromServices] IOrderRepository repo,
     [FromServices] IFusionCache cache) =>
 {
+    var userId = UserIds.Get(user);
     var order = await cache.GetOrSetAsync<Order?>(
-        $"order:{id}",
-        (ctx, ct) => Task.FromResult(store.Find(id)),
+        $"order:{userId}:{id}",
+        (ctx, ct) => repo.FindAsync(id, userId),
         options: new FusionCacheEntryOptions(TimeSpan.FromSeconds(30)));
     return order is null ? Results.NotFound() : Results.Ok(order);
 });
@@ -83,7 +110,14 @@ orders.MapGet("/{id:guid}", async (
 app.Run();
 
 public record CreateOrderRequest(string ProductName, int Quantity);
-public record Order(Guid Id, string ProductName, int Quantity, string Status);
+
+public record Order(
+    Guid Id,
+    string ProductName,
+    int Quantity,
+    string Status,
+    string UserId = "anonymous",
+    DateTimeOffset CreatedAt = default);
 
 public class CreateOrderValidator : AbstractValidator<CreateOrderRequest>
 {
@@ -94,11 +128,12 @@ public class CreateOrderValidator : AbstractValidator<CreateOrderRequest>
     }
 }
 
-public class OrderStore
+public static class UserIds
 {
-    private readonly ConcurrentDictionary<Guid, Order> _orders = new();
-    public void Add(Order o) => _orders[o.Id] = o;
-    public Order? Find(Guid id) => _orders.GetValueOrDefault(id);
+    public static string Get(ClaimsPrincipal user) =>
+        user.FindFirst("sub")?.Value
+        ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value
+        ?? "anonymous";
 }
 
 public interface IPaymentClient { Task<bool> ChargeAsync(decimal amount); }
