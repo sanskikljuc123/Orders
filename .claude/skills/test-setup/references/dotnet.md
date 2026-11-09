@@ -1,10 +1,26 @@
 # .NET testing setup
 
-Patterns proven in a real ASP.NET Core + Aspire repo (xUnit 2.9, FakeItEasy, WebApplicationFactory,
-Testcontainers, Aspire.Hosting.Testing, Microsoft.Playwright, Reqnroll). Adapt names to the target
-repo and match its existing frameworks (NUnit/MSTest, Moq/NSubstitute) if those are already used.
+Patterns proven in a real ASP.NET Core + Aspire repo. Adapt names to the target repo and match
+its existing frameworks (NUnit/MSTest, Moq/NSubstitute) if those are already used.
+
+## Reference stack
+
+.NET 10 SDK (pinned in `global.json`) | .NET Aspire (dev orchestration, E2E host) | xUnit 2.9 |
+Reqnroll (Gherkin) + Microsoft.Playwright | FakeItEasy | Testcontainers | Keycloak (auth) |
+Autofac 9 (DI) | FusionCache 2.5 | FluentValidation 12.1 | Serilog | GitVersion | NUKE (build) |
+Helm + Kubernetes (deploy via `aspire publish` + `helm`)
+
+| Layer | Project | Runs | External services mocked with |
+|---|---|---|---|
+| Unit | `tests/<App>.UnitTests` | in-process | FakeItEasy |
+| Integration | `tests/<App>.IntegrationTests` | in-process (WebApplicationFactory) + Testcontainers | FakeItEasy via Autofac `ConfigureTestContainer` |
+| E2E | `tests/<App>.E2E` | Aspire, separate processes + Playwright | Fake service project (real process) |
+| Browser-side calls | any Playwright test | browser | `Page.RouteAsync` |
+
+Testcontainers = single-service integration tests. Aspire = whole-system E2E and local dev.
 
 ## Contents
+0. Reference stack
 1. Project layout and versions
 2. Unit tests
 3. Integration tests (WebApplicationFactory + Testcontainers)
@@ -20,8 +36,10 @@ tests/
   <App>.UnitTests/          # in-process, fakes only
   <App>.IntegrationTests/   # WebApplicationFactory + Testcontainers
   <App>.E2E/                # whole system + browser
-    Features/  Steps/  Pages/  Hooks.cs  TestEnvironment.cs
+    Features/  Steps/  Pages/  Hooks/  TestEnvironment.cs
 ```
+
+- The SDK version lives only in `global.json`; don't set it anywhere else.
 
 - If the repo has `Directory.Packages.props` (central package management), add
   `<PackageVersion>` there and use version-less `<PackageReference Include="..."/>` in .csproj.
@@ -70,6 +88,10 @@ public void Quantity_outside_1_to_100_is_rejected(int quantity)
   instead of `DateTime.Now`.
 - Interaction checks (`MustHaveHappenedOnceExactly`) only when the call *is* the contract
   (e.g. "charges quantity × price").
+- FusionCache: use a real in-memory `FusionCache` instance rather than faking `IFusionCache`,
+  and assert the observable effect (second read doesn't hit the fake repository). In
+  integration tests, use unique keys/data per test so cached values from one test can't leak
+  into another.
 
 ## 3. Integration tests (WebApplicationFactory + Testcontainers)
 
@@ -89,9 +111,10 @@ public class OrdersApiFactory : WebApplicationFactory<Program>
 }
 ```
 
-If the app uses **Autofac**, `ConfigureTestServices` registrations may be overridden by the
-container; register fakes with `builder.ConfigureTestContainer<ContainerBuilder>(b => b.RegisterInstance(Payment))`.
-Check which one actually takes effect by running a test that depends on the fake.
+With **Autofac** as the DI container, register fakes with
+`builder.ConfigureTestContainer<ContainerBuilder>(b => b.RegisterInstance(Payment).As<IPaymentClient>())`;
+Autofac registrations can override `ConfigureTestServices` ones. Check which one actually takes
+effect by running a test that depends on the fake.
 
 Real infrastructure variant — containers started once per collection:
 
@@ -150,13 +173,18 @@ public static class TestEnvironment
 - Start the app host + browser once per test run (`[BeforeTestRun]` in Reqnroll, an assembly/
   collection fixture in plain xUnit). Wait on resource health, not on sleeps; prefer adding a
   health check to the resource over a polling loop.
-- **Fresh `BrowserContext` per scenario** with `BaseURL = ApiUrl`; start tracing in it.
-- **Login once per user**: sign in through the real login page, `context.StorageStateAsync()`,
+- **Explore the live UI first** with `playwright-cli` and its skills (`playwright-cli install --skills`)
+  to find role/label/test-id locators before writing any selector.
+- **Fresh `BrowserContext` per scenario** with `BaseURL = ApiUrl`, `RecordVideoDir` set, and
+  tracing started.
+- **Keycloak login once per user**: sign in through the real login page, `context.StorageStateAsync()`,
   cache it, and open later contexts with `StorageState = cached`.
-- On failure: screenshot + `Tracing.StopAsync(new() { Path = ... .zip })` into an artifacts folder
-  the CI uploads. Always close the context and reset fakes in a `finally`.
-- Page objects own all locators (`GetByTestId`, `GetByRole`, `GetByLabel`); steps call page-object
-  methods and use `Assertions.Expect(locator).ToHaveTextAsync(...)` (auto-retrying).
+- On failure keep **trace + screenshot + video**: screenshot, `Tracing.StopAsync(new() { Path = ... .zip })`,
+  and `page.Video.SaveAsAsync(...)` into an artifacts folder the CI uploads; on success
+  `page.Video.DeleteAsync()`. Always close the context and reset fakes in a `finally`.
+- Page objects own **all** locators — `GetByRole`, `GetByLabel`, `GetByTestId`, no brittle
+  CSS/XPath; steps call page-object methods and use `Assertions.Expect(locator).ToHaveTextAsync(...)`.
+- No `Thread.Sleep` / `Task.Delay` as a wait; rely on Playwright auto-waiting and `Expect(...)`.
 - Timeouts: set once via `Assertions.SetDefaultExpectTimeout(ms)` and `context.SetDefaultTimeout(ms)`
   rather than `new() { Timeout = 30000 }` on individual assertions.
 - One shared browser/app host → xUnit parallelism usually disabled for the E2E assembly
@@ -166,7 +194,8 @@ public static class TestEnvironment
   (`--with-deps` on CI). The browser version must match the `Microsoft.Playwright` package.
 
 Reqnroll (Gherkin), if the repo uses it:
-- `Features/*.feature` written in user language; tags `@smoke`, `@regression`.
+- Features in `tests/<App>.E2E/Features`, steps in `Steps`, page objects in `Pages`, hooks in `Hooks`.
+- Features written in user language; tags `@smoke`, `@regression`.
 - Steps describe behaviour (`When I order 2 of "Book"`), not clicks.
 - Per-scenario state via DI-injected classes (context injection), not static fields.
 
@@ -201,7 +230,10 @@ neither, add a README stating `UNVERIFIED ASSUMPTION` and what was assumed. Add 
 - uses: actions/upload-artifact@v4   # if: always(); TestResults + playwright-artifacts
 ```
 
-If the repo has a build entry point (NUKE, Cake, make), add targets there and have CI call it.
+If the repo has a build entry point (NUKE, Cake, make), add targets there and have CI call only
+`./build.sh` / `./build.cmd`; the version comes from GitVersion into NUKE. Upload trace,
+screenshot and video artifacts with `if: always()`.
+Helm charts (from `aspire publish -o <dir>`): gate them with `helm lint` and `helm template`.
 Coverage: `coverlet.collector` + `dotnet test --collect:"XPlat Code Coverage"`, gate with a report
 tool (e.g. ReportGenerator) or `coverlet.msbuild` thresholds (`/p:Threshold=<n> /p:ThresholdType=branch`).
 Verify the package and property names for the version you install.
@@ -210,6 +242,7 @@ Verify the package and property names for the version you install.
 
 - `WebApplicationFactory` + Serilog bootstrap logger can throw "logger is already frozen" when
   several factories start in one process — use `CreateLogger()` in tests or guard the bootstrap.
+- Serilog: structured logs only; never log secrets or tokens (including tokens fetched in test helpers).
 - Narrow catches only: a readiness poll may catch `HttpRequestException`, never `catch { }`.
 - xUnit 2 has no built-in random order; keep tests order-independent by construction (fresh
   instance per test, unique data) and run the suite twice.

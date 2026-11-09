@@ -140,7 +140,8 @@ with `npx playwright test --grep @smoke`.
 
 - `npx playwright test --ui`, `--headed`, `--debug`.
 - Trace: `npx playwright show-trace test-results/<test>/trace.zip`.
-- Explore the live UI to pick locators before writing them (`npx playwright codegen <url>`).
+- Explore the live UI to pick locators before writing them: `playwright-cli` with its skills
+  (`playwright-cli install --skills`), or `npx playwright codegen <url>`.
 
 ## CI
 

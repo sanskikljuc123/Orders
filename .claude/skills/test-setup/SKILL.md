@@ -110,7 +110,8 @@ Write a small, high-value set first (the "would hurt" list), get it green, then 
   "charges 30.00"), not as a substitute for checking the outcome.
 - **User-centric E2E**: steps and test names describe what the user does and sees
   ("places an order", "sees Order Paid"), never clicks or selectors. Selectors live only in
-  page objects; prefer role/label/test-id locators.
+  page objects; prefer role/label/test-id locators, and explore the live UI first
+  (`playwright-cli` + its skills, or `codegen`) to find them before writing any selector.
 - **Cover the failure path**, not only the happy path: validation errors, 401/403/404,
   downstream failure, timeouts.
 - **Each test owns its data**: creates what it needs, cleans up (or uses unique data inside a
