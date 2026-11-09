@@ -27,6 +27,10 @@ class Build : NukeBuild
 
     AbsolutePath Solution => RootDirectory / "Orders.slnx";
     AbsolutePath ResultsDir => RootDirectory / "TestResults";
+    AbsolutePath ChartDir => RootDirectory / "k8s-artifacts";   // generated, git-ignored (contains generated passwords)
+
+    [Parameter("Environment for deploy/values.<env>.yaml")]
+    readonly string Environment = "dev";
 
     Target ComputeVersion => _ => _
         .Executes(() =>
@@ -89,6 +93,26 @@ class Build : NukeBuild
         {
             CheckBranchCoverage("Orders.UnitTests", UnitBranchFloor);
             CheckBranchCoverage("Orders.IntegrationTests", IntegrationBranchFloor);
+        });
+
+    Target Publish => _ => _
+        .DependsOn(Compile)
+        .Executes(() =>
+        {
+            ChartDir.CreateOrCleanDirectory();
+            DotNet($"aspire publish -o {ChartDir} --non-interactive", RootDirectory);
+        });
+
+    Target Helm => _ => _
+        .DependsOn(Publish)
+        .Executes(() =>
+        {
+            // Phase 7 gate: the generated chart lints and renders with the environment's values.
+            var values = RootDirectory / "deploy" / $"values.{Environment}.yaml";
+            Assert.FileExists(values);
+            var helm = ToolResolver.GetPathTool("helm");
+            helm($"lint {ChartDir} -f {values}");
+            helm($"template orders {ChartDir} -f {values}", logOutput: false);
         });
 
     Target Test => _ => _

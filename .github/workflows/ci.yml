@@ -17,10 +17,15 @@ jobs:
         with:
           global-json-file: global.json
 
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.22.1   # same version as local runs
+
       # NUKE is the single entry point: Compile, unit + integration tests with coverage gate,
-      # Playwright browser install (matching Microsoft.Playwright), E2E.
-      - name: Build and test
-        run: ./build.sh --target Test
+      # Playwright browser install (matching Microsoft.Playwright), E2E, then
+      # aspire publish + helm lint/template (phase 7 gate).
+      - name: Build, test and check Helm chart
+        run: ./build.sh --target Test Helm
 
       - name: Upload test results
         if: always()

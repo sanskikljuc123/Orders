@@ -28,8 +28,10 @@
         "ComputeVersion",
         "CoverageGate",
         "E2ETests",
+        "Helm",
         "InstallBrowser",
         "IntegrationTests",
+        "Publish",
         "Restore",
         "Test",
         "UnitTests"
@@ -109,6 +111,10 @@
         "Configuration": {
           "type": "string",
           "description": "Build configuration"
+        },
+        "Environment": {
+          "type": "string",
+          "description": "Environment for deploy/values.<env>.yaml"
         },
         "IntegrationBranchFloor": {
           "type": "number",
