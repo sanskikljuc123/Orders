@@ -105,6 +105,12 @@ if (authEnabled)
             o.TokenValidationParameters.NameClaimType = "preferred_username";
         });
     builder.Services.AddAuthorization();
+
+    // Server-side sessions: the cookie holds only a key, and logout deletes the session, so a copied
+    // cookie cannot be replayed after logout.
+    builder.Services.AddSingleton<SessionStore>();
+    builder.Services.AddOptions<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme)
+        .Configure<SessionStore>((o, store) => o.SessionStore = store);
 }
 
 var app = builder.Build();

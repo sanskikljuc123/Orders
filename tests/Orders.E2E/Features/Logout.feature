@@ -19,3 +19,9 @@ Feature: Signing out
     When I log out
     And I start logging in again
     Then I am asked for my password
+
+  Scenario: A copy of the session cookie stops working after logout
+    Given I keep a copy of my session cookie
+    Then the copied session cookie is accepted
+    When I log out
+    Then the copied session cookie is rejected
