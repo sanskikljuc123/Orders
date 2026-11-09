@@ -101,6 +101,7 @@ if (authEnabled)
             // Otherwise the handler defaults apply: form_post, SameSite=None + Secure correlation/nonce cookies.
             o.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
             o.Scope.Add("profile");
+            o.SaveTokens = true;   // id_token_hint for Keycloak logout
             o.TokenValidationParameters.NameClaimType = "preferred_username";
         });
     builder.Services.AddAuthorization();
@@ -128,9 +129,12 @@ if (authEnabled)
     app.MapGet("/login", () =>
         Results.Challenge(new AuthenticationProperties { RedirectUri = "/" }, new[] { "oidc" }));
 
+    // Ends both sessions: the app cookie and Keycloak's own (RP-initiated logout via the end-session
+    // endpoint, with the saved id_token as hint). Clearing only the cookie left Keycloak signed in,
+    // so "Log in" signed the user straight back in without a password.
     app.MapGet("/logout", () =>
         Results.SignOut(new AuthenticationProperties { RedirectUri = "/" },
-            new[] { CookieAuthenticationDefaults.AuthenticationScheme }));
+            new[] { CookieAuthenticationDefaults.AuthenticationScheme, "oidc" }));
 }
 
 var me = app.MapGet("/me", (ClaimsPrincipal user) => Results.Ok(new { name = UserIds.Name(user) }));

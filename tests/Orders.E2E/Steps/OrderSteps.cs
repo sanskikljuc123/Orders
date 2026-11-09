@@ -40,6 +40,16 @@ public class OrderSteps(ScenarioBrowser browser, OrderContext ordered)
     [When("I open my orders")]
     public Task OpenMyOrders() => Shop.OpenMyOrdersAsync();
 
+    // Checks the UI and the server: a hidden form alone would still let the old session order.
+    // The login link comes first, so the hidden-form check runs on the reloaded, signed-out page.
+    [Then("I can no longer place an order")]
+    public async Task CannotPlaceOrder()
+    {
+        await Assertions.Expect(Shop.LoginLink).ToBeVisibleAsync();
+        await Assertions.Expect(Shop.PlaceOrderButton).ToBeHiddenAsync();
+        Assert.Equal(401, await Shop.SendOrderRequestAsync($"Book {Guid.NewGuid().ToString("N")[..8]}", 1));
+    }
+
     [Then("I see the result {string}")]
     public Task SeeResult(string expected) => Assertions.Expect(Shop.Result).ToHaveTextAsync(expected);
 
