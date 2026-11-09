@@ -22,8 +22,14 @@ header points to a fetchable resource.
 
 ## Consumer-driven contract tests (Pact)
 
-Use when one service calls another you deploy independently, so a provider change can't silently
-break a consumer.
+Use when one service calls another **that your organisation owns and deploys independently**, so
+a provider change can't silently break a consumer. Pact only works if the provider team runs the
+verification in their CI — a third-party API (payment gateway, Keycloak, SaaS) never will.
+
+| Provider | How to keep the consumer honest |
+|---|---|
+| Your own service | Pact: consumer writes the pact, provider verifies it, `can-i-deploy` gates release |
+| Third-party API | Validate your fake's requests/responses against the provider's published OpenAPI spec or recorded real responses; optionally a small, scheduled (not per-PR) smoke test against the provider's sandbox |
 
 1. **Consumer side** writes an interaction: "given order 42 exists, GET /orders/42 returns
    `{ id: 42, status: like("Paid") }`" using matchers (`like`, `eachLike`, regex), not exact

@@ -205,8 +205,9 @@ app.MapPost("/__admin/mode", (ModeRequest r) => { mode = r.Mode; return Results.
 ```
 
 Build request/response shapes from the provider's OpenAPI spec or recorded real responses. With
-neither, add a README stating `UNVERIFIED ASSUMPTION` and what was assumed. Add a contract test
-(Pact) when the real provider can verify it.
+neither, add a README stating `UNVERIFIED ASSUMPTION` and what was assumed. For a service you own, add a
+Pact contract test; for a third-party provider, check the fake against its spec instead
+(see `api-and-contracts.md`).
 
 ## 6. CI
 
