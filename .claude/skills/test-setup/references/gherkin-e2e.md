@@ -46,14 +46,28 @@ Feature: Placing an order
     When I order 2 of "Book"
     Then I see the result "Order Paid"
 
-  Scenario Outline: Invalid quantity is rejected
-    When I order <quantity> of "Book"
+  Scenario: Empty product name is rejected
+    When I order 1 without a product name
     Then I see the result "Validation error"
+```
+
+One representative validation scenario is enough in E2E; boundary values (0, 1, 100, 101, empty,
+51 chars) belong in unit tests. Use `Scenario Outline` for variations that need the whole
+system — users, roles, permissions — not for input permutations:
+
+```gherkin
+Feature: Order privacy
+
+  Scenario Outline: A user never sees another user's orders
+    Given "<other>" has ordered "<secret>"
+    And I am signed in as "<user>"
+    When I open my orders
+    Then my order list does not contain "<secret>"
 
     Examples:
-      | quantity | case        |
-      | 0        | below min   |
-      | 101      | above max   |
+      | user | other | secret            |
+      | ana  | bob   | Bobs secret order |
+      | bob  | ana   | Anas secret order |
 ```
 
 - **Declarative, not imperative.** `When I order 2 of "Book"` — not `When I fill "#product"
