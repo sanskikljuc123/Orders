@@ -9,6 +9,7 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Testcontainers.Keycloak" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -23,9 +24,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="..\..\src\Orders.AppHost\Realms\orders-realm.json"
-          Link="Realms\orders-realm.json"
-          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\Orders.AppHost\Realms\orders-realm.json" Link="Realms\orders-realm.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

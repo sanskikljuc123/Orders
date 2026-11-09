@@ -4,7 +4,8 @@ using System.Net.Http.Json;
 using FakeItEasy;
 using Xunit;
 
-public class AuthApiTests(AuthApiFixture fixture) : IClassFixture<AuthApiFixture>
+[Collection("Stack")]
+public class AuthApiTests(AuthApiFixture fixture)
 {
     private static readonly object Body = new { productName = "Book", quantity = 1 };
 
