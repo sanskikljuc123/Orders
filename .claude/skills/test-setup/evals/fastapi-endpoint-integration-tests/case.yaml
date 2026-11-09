@@ -1,6 +1,0 @@
-schema_version: "1.1"
-name: fastapi-endpoint-integration-tests
-expected_outcome: |
-  Adds pytest tests using TestClient/httpx with dependency overrides or respx to fake the payment provider (no real network), covering 201 + body fields, 400/422 validation with message, 401 without token, 404 unknown id, another user's order not visible, and payment decline; fixtures clean up; parametrized boundaries; tests run or the exact command is given.
-context:
-  scaffold_script: place-files.sh

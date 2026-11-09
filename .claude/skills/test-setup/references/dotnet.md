@@ -1,7 +1,7 @@
 # .NET testing setup
 
-Patterns proven in a real ASP.NET Core + Aspire repo. Adapt names to the target repo and match
-its existing frameworks (NUnit/MSTest, Moq/NSubstitute) if those are already used.
+Unit, integration, fakes and CI for C# projects. E2E/Gherkin lives in `gherkin-e2e.md`. Adapt names
+to the target repo and match its existing frameworks (NUnit/MSTest, Moq/NSubstitute) if already used.
 
 ## Reference stack
 
@@ -24,7 +24,7 @@ Testcontainers = single-service integration tests. Aspire = whole-system E2E and
 1. Project layout and versions
 2. Unit tests
 3. Integration tests (WebApplicationFactory + Testcontainers)
-4. E2E (Aspire + Playwright, optionally Reqnroll/Gherkin)
+4. E2E (see gherkin-e2e.md)
 5. Fake external services
 6. CI
 7. Gotchas
@@ -149,55 +149,9 @@ public class OrdersDatabaseTests(StackFixture fixture) { ... }
 - Read the DB through a scope to assert persistence:
   `using var scope = fixture.Services.CreateScope(); var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();`
 
-## 4. E2E (Aspire + Playwright)
+## 4. E2E (Aspire + Playwright + Reqnroll)
 
-Aspire runs services as **separate processes** — DI replacement and FakeItEasy do not work there.
-Replace external services with a fake *project* registered in the AppHost.
-
-```csharp
-public static class TestEnvironment
-{
-    public static async Task StartAsync()
-    {
-        var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.App_AppHost>();
-        _app = await builder.BuildAsync();
-        await _app.StartAsync();
-        await _app.ResourceNotifications.WaitForResourceHealthyAsync("api").WaitAsync(TimeSpan.FromMinutes(5));
-        ApiUrl = _app.GetEndpoint("api", "http").ToString();
-        _playwright = await Playwright.CreateAsync();
-        Browser = await _playwright.Chromium.LaunchAsync(new() { Headless = Environment.GetEnvironmentVariable("HEADED") != "1" });
-    }
-}
-```
-
-- Start the app host + browser once per test run (`[BeforeTestRun]` in Reqnroll, an assembly/
-  collection fixture in plain xUnit). Wait on resource health, not on sleeps; prefer adding a
-  health check to the resource over a polling loop.
-- **Explore the live UI first** with `playwright-cli` and its skills (`playwright-cli install --skills`)
-  to find role/label/test-id locators before writing any selector.
-- **Fresh `BrowserContext` per scenario** with `BaseURL = ApiUrl`, `RecordVideoDir` set, and
-  tracing started.
-- **Keycloak login once per user**: sign in through the real login page, `context.StorageStateAsync()`,
-  cache it, and open later contexts with `StorageState = cached`.
-- On failure keep **trace + screenshot + video**: screenshot, `Tracing.StopAsync(new() { Path = ... .zip })`,
-  and `page.Video.SaveAsAsync(...)` into an artifacts folder the CI uploads; on success
-  `page.Video.DeleteAsync()`. Always close the context and reset fakes in a `finally`.
-- Page objects own **all** locators — `GetByRole`, `GetByLabel`, `GetByTestId`, no brittle
-  CSS/XPath; steps call page-object methods and use `Assertions.Expect(locator).ToHaveTextAsync(...)`.
-- No `Thread.Sleep` / `Task.Delay` as a wait; rely on Playwright auto-waiting and `Expect(...)`.
-- Timeouts: set once via `Assertions.SetDefaultExpectTimeout(ms)` and `context.SetDefaultTimeout(ms)`
-  rather than `new() { Timeout = 30000 }` on individual assertions.
-- One shared browser/app host → xUnit parallelism usually disabled for the E2E assembly
-  (`[assembly: CollectionBehavior(DisableTestParallelization = true)]`). Say why in a comment;
-  isolation still comes from fresh contexts and unique data.
-- Install browsers after build: `pwsh tests/<App>.E2E/bin/Debug/net10.0/playwright.ps1 install chromium`
-  (`--with-deps` on CI). The browser version must match the `Microsoft.Playwright` package.
-
-Reqnroll (Gherkin), if the repo uses it:
-- Features in `tests/<App>.E2E/Features`, steps in `Steps`, page objects in `Pages`, hooks in `Hooks`.
-- Features written in user language; tags `@smoke`, `@regression`.
-- Steps describe behaviour (`When I order 2 of "Book"`), not clicks.
-- Per-scenario state via DI-injected classes (context injection), not static fields.
+See `gherkin-e2e.md`.
 
 ## 5. Fake external services
 

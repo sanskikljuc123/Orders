@@ -1,4 +1,4 @@
-# API and contract testing (any stack)
+# API and contract testing (.NET)
 
 ## Per-endpoint coverage
 
@@ -34,17 +34,17 @@ break a consumer.
    set up via a state-change endpoint/hook. Run it in the provider's CI.
 4. Gate deploys with `can-i-deploy`.
 
-Libraries: PactNet (.NET), `@pact-foundation/pact` (JS), `pact-python`, pact-jvm. Check the
-current major version's API — they changed significantly between majors.
+Library: PactNet. Check the current major version's API — it changed significantly between majors.
 
 Contract tests check *shape and semantics the consumer uses*, not provider business logic;
 keep those in the provider's own tests.
 
 ## Fakes for third-party APIs
 
-- Build them from the provider's OpenAPI spec or recorded real responses (HAR, VCR cassettes,
-  WireMock recordings). Without either, keep the fake minimal and document it as an
+- Build them from the provider's OpenAPI spec or recorded real responses (HAR files,
+  WireMock.Net recordings). Without either, keep the fake minimal and document it as an
   `UNVERIFIED ASSUMPTION`.
-- In-process tests: HTTP-level mocks (WireMock.Net, MSW, respx/responses) or DI fakes.
-- Out-of-process tests (E2E, compose, Aspire): a fake service process with a test-only control
+- In-process tests: FakeItEasy fakes registered via `ConfigureTestServices` / Autofac
+  `ConfigureTestContainer`, or HTTP-level mocks (WireMock.Net) for typed `HttpClient`s.
+- Out-of-process tests (E2E on Aspire): a fake service process with a test-only control
   endpoint (e.g. `POST /__admin/mode`), reset after each test.

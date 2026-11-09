@@ -1,7 +1,6 @@
-# Testing principles and anti-patterns
+# Testing principles and anti-patterns (C# + Gherkin)
 
-The reasoning behind the workflow in SKILL.md. Apply them with the idioms of whatever stack the
-repo uses.
+The reasoning behind the workflow in SKILL.md.
 
 ## Contents
 1. Mindset
@@ -10,111 +9,92 @@ repo uses.
 4. Assertions
 5. Coverage
 6. Structure and readability
-7. E2E specifics
-8. Anti-patterns
+7. Anti-patterns
 
 ## 1. Mindset
 
 - **Reliability over quantity.** One trustworthy test beats ten flaky ones. A suite the team
   doesn't trust is worse than none: red builds get rubber-stamped and real failures slip through.
-- **User-centric.** Write tests from the perspective of whoever consumes the code — an end user
-  in the UI, an API caller, another module. Tests should mirror real journeys and real calls.
+- **User-centric.** Write tests from the perspective of whoever consumes the code — a user in the
+  browser, an API caller, another class. Scenarios mirror real user journeys.
 - **Risk first.** Ask "what regression would actually hurt in production?" and test that first.
-- **Tests are documentation.** A new team member should understand the rule from the test name
-  and body alone.
+- **Tests are documentation.** A new team member should understand the rule from the test or
+  scenario name and body alone.
 
 ## 2. Designing a test
 
-- Read the code under test and its existing tests before writing anything. Match the repo's
-  framework, naming, assertion style and folder layout.
+- Read the code under test and its existing tests first. Match the repo's naming, assertion
+  style, fixture patterns and folder layout.
 - Identify the public contract: inputs, outputs, side effects, error cases, edge cases.
-- Pick the level: pure logic → unit; module + collaborators (DB, HTTP) → integration; real user
-  journey through the UI → E2E; cross-service API shape → contract test.
-- Test behaviour, not implementation. Assert on what the user observes or the caller receives,
-  not on private fields, internal call order or class structure. Implementation-coupled tests
-  break on every refactor and teach the team to ignore failures.
-- Don't over-mock. If the test mostly asserts that a mock returned what you told it to, it tests
-  nothing. Mock at the boundary (network, clock, third-party SDK), keep real code in between.
+- Pick the level: pure logic → unit; class + collaborators (DB, HTTP pipeline) → integration;
+  real user journey through the UI → E2E (Gherkin); cross-service API shape → contract (Pact).
+- **Test behaviour, not implementation.** Assert what the user sees or the caller receives, not
+  private fields, internal call order or class structure. Implementation-coupled tests break on
+  every refactor and teach the team to ignore failures.
+- **Don't over-mock.** If a test mostly asserts that a fake returned what you told it to, it tests
+  nothing. Fake at the boundary (payment client, clock, external HTTP); keep real code in between.
 - Mock external APIs and payment gateways; never hit third-party services from tests.
 
 ## 3. Isolation and determinism
 
 - Each test sets up and tears down its own data; never rely on another test running first.
-- No shared mutable state between tests (static fields, module-level variables, a shared DB row
-  that tests modify). Shared *read-only* or *expensive* setup (a container, an app host, a saved
-  login) is fine via fixtures.
-- Clean up side effects: DB records, uploaded files, temp dirs, queues, a fake service's mode.
-  Prefer fixtures with automatic teardown (`afterEach`, `DisposeAsync`, `yield` fixtures) over
-  manual cleanup at the end of a test body, which is skipped when an assertion fails.
-- Unique data per test (GUID/uuid suffix) avoids collisions when tests share a database.
-- Deterministic by default: no real network in unit tests, no real clock (inject/freeze time),
-  no random data without a fixed seed, no ordering dependencies. Same input, same result.
-- Run in randomized order and in parallel (where the runner supports it) to expose hidden
-  coupling. If parallelism must be disabled (shared browser, shared external process), say why
-  in a comment next to the setting.
+- No shared mutable state between tests (static fields, a shared DB row tests modify). Shared
+  *expensive* setup (container, Aspire host, browser, saved login) is fine via fixtures/hooks.
+- Clean up side effects — DB rows, files, a fake service's mode — in `DisposeAsync` /
+  `[AfterScenario]` inside `finally`, so it runs even when an assertion fails.
+- Unique data per test (`$"Book-{Guid.NewGuid():N}"`) avoids collisions in a shared database;
+  assert `Contains`/`DoesNotContain` on your own data, not global counts.
+- **Deterministic by default:** no real network in unit tests, `TimeProvider` instead of
+  `DateTime.Now`, seeded `Random`, no ordering dependencies. Same input, same result, every run.
+- xUnit creates a new class instance per test; keep it that way (no static state). If
+  parallelism is disabled (shared browser/app host), say why next to the setting — and keep tests
+  isolated anyway so it can be enabled later.
 
 ## 4. Assertions
 
-- Assert specific values and error messages, not just truthy / not-null / "no throw".
-  `status == 400` *and* `errors.quantity == "Quantity must be between 1 and 100"`.
-- Add an assertion message when the failure would otherwise be ambiguous (e.g. inside a loop or
-  parameterized case: include the case values).
-- Soft assertions for non-blocking checks (several independent fields on one screen) so one
-  run reports all mismatches — but keep a hard assertion on the thing the test is about.
-- Wait with assertions, not with time: web-first/retrying assertions (`expect(locator).toHaveText`)
-  instead of sleeping and then reading.
+- Assert specific values and error messages, not just truthy / not-null / "no throw":
+  `Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode)` *and* the failing property/message.
+- `Assert.Throws<SpecificException>` / `ThrowsAsync`, then assert on its message — never
+  `catch { }`.
+- For ambiguous checks (loops, theory rows), make the failure self-explaining: put case values in
+  `[InlineData]`/`Examples` so the report names the case.
+- UI: web-first `Assertions.Expect(locator).ToHaveTextAsync("Order Paid")` — retries until the
+  timeout, so no sleeping first.
 
 ## 5. Coverage
 
 - Coverage is a floor, not a goal. 100% line coverage with weak assertions is theater.
-- Prefer branch coverage on critical modules (payments, auth, permissions, pricing).
+- Prefer branch coverage on critical code (payments, auth, ownership checks, pricing).
 - Add a coverage gate in CI at the current level so it can't silently regress; ratchet it up as
-  real tests are added. Never write meaningless tests just to hit the number.
-- Edge cases: empty, null/None, boundary values (min-1, min, max, max+1), unicode/emoji, very
-  large input, duplicates, and the failure/error path.
+  real tests are added. Never write meaningless tests to hit the number.
+- Edge cases: empty, null, whitespace, boundary values (min-1, min, max, max+1), unicode/emoji,
+  very long input, duplicates, and the failure/error path.
 
 ## 6. Structure and readability
 
-- Group related tests: one `describe` / test class per feature or unit.
-- `beforeEach` / constructor for common setup, but keep it minimal — if a reader has to scroll to
-  understand a test's preconditions, move that precondition into the test.
-- Share setup and authenticated state with custom fixtures, not copy-paste or global variables.
-- Parameterize instead of duplicating (`[Theory]`, `test.each`, `@pytest.mark.parametrize`, a
-  `for` over a case table in Playwright) — and put the case values in the test name.
-- Tag tests for selective runs: `@smoke`, `@critical`, `@regression`.
-- Keep files focused on one feature/page/module. No dead, skipped or commented-out tests.
-- Never swallow failures: no catch-all `try/catch {}` or `except: pass` in tests or helpers. Catch
-  only the specific exception you expect, and assert on it (`assertThrows`, `pytest.raises`).
+- One test class per unit/endpoint group; one `.feature` per capability.
+- Constructor / `Background` for common setup, but minimal — if a reader must scroll to find a
+  test's preconditions, move them into the test.
+- Share setup and authenticated state with fixtures (`IClassFixture`, `ICollectionFixture`,
+  Reqnroll context injection, cached storage state), not copy-paste.
+- Parameterize instead of duplicating: `[Theory]` + `[InlineData]`, `Scenario Outline` + `Examples`.
+- Tag scenarios `@smoke` / `@regression` for selective runs.
+- No dead, skipped or commented-out tests; no unused step definitions.
 
-## 7. E2E specifics
-
-- Steps and test names describe behaviour ("places an order"), not clicks ("clicks #submit").
-- Selectors live only in page objects. Prefer `getByRole`, `getByLabel`, `getByTestId`; avoid
-  brittle CSS/XPath. (Third-party pages you don't own — e.g. an identity provider's login form —
-  may need IDs; isolate them in one page-object method with a comment.)
-- Configure `baseURL` and use relative paths in `goto`.
-- Fresh browser context per test; log in once and reuse saved storage state.
-- Never `page.waitForTimeout()` / `Thread.Sleep` — rely on auto-waiting and explicit event waits
-  (`waitForResponse`, `waitForURL`, web-first assertions).
-- Timeouts, retries, workers, trace/screenshot/video settings belong in config, not in tests.
-- Keep traces, screenshots and videos on failure and upload them as CI artifacts. Debug with the
-  trace viewer (`npx playwright show-trace trace.zip` / `pwsh playwright.ps1 show-trace trace.zip`).
-- Browser-side calls to third parties: route/mock them in the browser (`page.route`).
-  Server-side calls in an out-of-process system: replace the dependency with a fake service.
-
-## 8. Anti-patterns (and the fix)
+## 7. Anti-patterns (and the fix)
 
 | Anti-pattern | Why it hurts | Instead |
 |---|---|---|
-| Hardcoded waits (`waitForTimeout(3000)`, `Thread.Sleep`) | Flaky and slow | Auto-waiting, event waits, retrying assertions |
+| `Thread.Sleep`, `Task.Delay` as a wait | Flaky and slow | Auto-waiting, `Expect(...)`, `WaitForResponseAsync` |
 | Shared mutable state between tests | Order-dependent, breaks in parallel | Each test creates its own data |
 | Testing implementation details | Breaks on every refactor | Assert observable behaviour |
-| Giant test files | Hard to navigate, merge conflicts | One file per feature/page |
-| Ignoring isolation | Fails in parallel / random order | Fresh context, unique data, teardown |
-| No baseURL, absolute URLs in tests | Can't retarget environments | Configure baseURL, relative `goto` |
-| Ambiguous assertions with no message | Failures are hard to diagnose | Specific values + context message |
-| Calling real third-party services | Flaky, costly, side effects | Fakes / mocks / routed requests |
-| Not cleaning up | Polluted DB, disk, follow-on failures | Fixtures with automatic teardown |
-| Catch-all `try/except: pass` | Hides real failures | Catch specific exceptions and assert |
-| Per-test timeouts everywhere | Masks slowness, inconsistent | Config-level timeouts |
-| Weak assertions (`IsValid == false` only) | Passes for the wrong reason | Also assert *which* rule failed |
+| Giant test classes / feature files | Hard to navigate, merge conflicts | One per capability |
+| Ignoring isolation | Fails when order changes | Fresh browser context, unique data, teardown |
+| Absolute URLs in steps/pages | Can't retarget environments | `BaseURL` on the context, relative `GotoAsync` |
+| Selectors in step definitions | UI change breaks many steps | Selectors only in page objects |
+| Imperative Gherkin ("click Submit") | Brittle, unreadable for business | Declarative behaviour steps |
+| Weak assertions (`IsValid == false` only) | Passes for the wrong reason | Assert which rule/message failed |
+| Calling real third-party services | Flaky, costly, side effects | FakeItEasy / fake service / `RouteAsync` |
+| Not cleaning up | Polluted DB, follow-on failures | Teardown in `finally` / fixtures |
+| Catch-all `try { } catch { }` | Hides real failures | Catch the specific exception and assert |
+| Per-assertion timeouts everywhere | Masks slowness, inconsistent | Config-level timeouts |
