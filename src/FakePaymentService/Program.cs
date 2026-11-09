@@ -9,6 +9,7 @@ app.MapPost("/charge", (ChargeRequest req) => mode switch
 });
 
 app.MapPost("/__admin/mode", (ModeRequest r) => { mode = r.Mode; return Results.Ok(); });
+app.MapPost("/__admin/reset", () => { mode = "approve"; return Results.Ok(); });   // called after every E2E scenario
 app.MapGet("/", () => $"FakePaymentService, mode: {mode}");
 app.Run();
 

@@ -20,6 +20,7 @@ builder.Host.ConfigureContainer<ContainerBuilder>(c =>
     c.RegisterType<CreateOrderValidator>().As<IValidator<CreateOrderRequest>>().SingleInstance();
 });
 builder.Services.AddFusionCache();
+builder.Services.AddHealthChecks();
 
 var paymentUrl = builder.Configuration["Payment:BaseUrl"];
 if (!string.IsNullOrEmpty(paymentUrl))
@@ -105,6 +106,8 @@ if (dbEnabled)
 }
 
 app.UseSerilogRequestLogging();
+// Anonymous readiness probe (Aspire WithHttpHealthCheck, E2E startup). Reports only "Healthy"/"Unhealthy".
+app.MapHealthChecks("/health");
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
