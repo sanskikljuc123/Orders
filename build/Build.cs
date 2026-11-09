@@ -70,9 +70,13 @@ class Build : NukeBuild
         {
             // Browser and ffmpeg (needed for video) matching the Microsoft.Playwright package.
             var script = RootDirectory / "tests" / "Orders.E2E" / "bin" / Configuration / "net10.0" / "playwright.ps1";
-            var deps = IsServerBuild ? " --with-deps" : "";
             var pwsh = ToolResolver.GetPathTool("pwsh");
-            pwsh($"\"{script}\" install{deps} chromium ffmpeg");
+            // Don't interpolate a string that contains spaces: NUKE quotes it as one argument
+            // (" --with-deps" became `install" --with-deps"` and Playwright rejected it).
+            if (IsServerBuild)
+                pwsh($"{script} install --with-deps chromium ffmpeg");
+            else
+                pwsh($"{script} install chromium ffmpeg");
         });
 
     Target E2ETests => _ => _
