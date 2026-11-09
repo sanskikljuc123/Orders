@@ -21,4 +21,10 @@
 # deploy/realms/orders-realm.prod.json once per environment (admin console: Create realm ->
 # Resource file, or `kc.sh import --file ...`). Replace the placeholder https://orders.example.com
 # with the real URL first; ProductionRealmTests keeps the file free of users and wildcards.
-{}
+#
+# Auth: outside Development the API requires HTTPS for Keycloak metadata (Auth:AllowInsecureHttp is
+# only on in appsettings.Development.json), so the chart's internal http://keycloak-service:8080
+# authority is refused. Point it at Keycloak's public HTTPS address (TLS ingress in front of it).
+config:
+  api:
+    Auth__Authority: "https://auth.example.com/realms/orders"   # PLACEHOLDER, replace with the real URL
