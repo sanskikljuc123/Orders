@@ -42,6 +42,9 @@ else
 
 var authority = builder.Configuration["Auth:Authority"];
 var authEnabled = !string.IsNullOrEmpty(authority);
+// Local runs and tests use Keycloak over plain http. Only appsettings.Development.json turns this on;
+// everywhere else the secure defaults apply (HTTPS metadata, form_post, Secure cookies).
+var allowInsecureHttp = builder.Configuration.GetValue("Auth:AllowInsecureHttp", false);
 if (authEnabled)
 {
     builder.Services
@@ -61,12 +64,14 @@ if (authEnabled)
         .AddJwtBearer(o =>
         {
             o.Authority = authority;
-            o.RequireHttpsMetadata = false; // dev Keycloak runs on plain http
+            o.RequireHttpsMetadata = !allowInsecureHttp;
             o.TokenValidationParameters.ValidateAudience = false;
         })
         .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, o =>
         {
             o.Cookie.Name = "orders.auth";
+            o.Cookie.SameSite = SameSiteMode.Lax;
+            o.Cookie.SecurePolicy = allowInsecureHttp ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
             // API-style behaviour: answer 401 instead of redirecting. Login starts only at /login.
             o.Events.OnRedirectToLogin = ctx =>
             {
@@ -83,13 +88,17 @@ if (authEnabled)
         {
             o.Authority = authority;
             o.ClientId = "orders-web";
-            o.RequireHttpsMetadata = false;
+            o.RequireHttpsMetadata = !allowInsecureHttp;
             o.ResponseType = "code";
             o.UsePkce = true;
-            // Dev runs on plain http: use query response mode and Lax cookies (form_post needs SameSite=None+Secure).
-            o.ResponseMode = "query";
-            o.CorrelationCookie.SameSite = SameSiteMode.Lax;
-            o.NonceCookie.SameSite = SameSiteMode.Lax;
+            if (allowInsecureHttp)
+            {
+                // Plain http: query response mode and Lax cookies (form_post needs SameSite=None + Secure).
+                o.ResponseMode = "query";
+                o.CorrelationCookie.SameSite = SameSiteMode.Lax;
+                o.NonceCookie.SameSite = SameSiteMode.Lax;
+            }
+            // Otherwise the handler defaults apply: form_post, SameSite=None + Secure correlation/nonce cookies.
             o.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
             o.Scope.Add("profile");
             o.TokenValidationParameters.NameClaimType = "preferred_username";

@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: gherkin-logout-scenario
+expected_outcome: |
+  Adds a declarative, tagged logout scenario under tests/Orders.E2E/Features that reuses the existing sign-in step, puts the logout locator in a page object using GetByRole (the link has no test id), asserts both the signed-out UI and that ordering is rejected, uses Expect(...) without sleeps or per-assertion timeouts, and reports the real dotnet test result or the exact command if Docker/a browser is unavailable.

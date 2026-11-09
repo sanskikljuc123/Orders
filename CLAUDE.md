@@ -56,6 +56,10 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
 - NUKE (`build/`) is the single entry point: Restore, Compile, Test, Publish, Helm.
   GitHub Actions only calls `./build.sh` / `./build.cmd`.
 - Version comes from GitVersion into NUKE.
+- NUKE commands: never interpolate a value that contains spaces (e.g. `$" --flag"`) into
+  `DotNet($"...")` / tool calls; NUKE quotes it as ONE argument. Write the full command per case.
+  (Broke `InstallBrowser` and the ghcr.io push.) Test the push path with
+  `./build.sh --target Images --push-images true --image-registry localhost:5000` and a local `registry:2`.
 - Deploy: `aspire publish -o <dir>` then `helm upgrade --install ... -f deploy/values.<env>.yaml`.
   Do NOT rely on `aspire deploy` for Kubernetes until it is proven stable here.
 - Logging: Serilog structured logs; never log secrets/tokens.
@@ -67,10 +71,14 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
 - Only `deploy/values.dev.yaml` exists; image tags are passed with `--set` at deploy time.
   Production Keycloak realm: `deploy/realms/orders-realm.prod.json` (no users, HTTPS required,
   exact redirect `https://orders.example.com/signin-oidc` = PLACEHOLDER URL, brute-force
-  protection, no password grant), guarded by `ProductionRealmTests`. It is imported by hand per
-  environment; the chart does not mount it.
-- API OIDC options are dev-oriented (`RequireHttpsMetadata = false`, `ResponseMode = query`,
-  Lax cookies); review them before a real HTTPS deployment.
+  protection, no password grant), guarded by `ProductionRealmTests`. Aspire's publisher cannot
+  carry a realm import (it breaks `aspire publish`), so the NUKE Publish target adds
+  `deploy/chart-extras` to the generated chart: a Helm post-install/upgrade Job that creates the
+  realm with `kcadm.sh` if missing (never overwrites). Its Keycloak image must match the chart's.
+- API login settings: secure by default (HTTPS metadata, `form_post`, Secure cookies). Plain-http
+  settings only via `Auth:AllowInsecureHttp` in `appsettings.Development.json` (local runs, tests).
+  Guarded by `AuthSecurityOptionsTests`. Deployed Keycloak needs HTTPS: `Auth__Authority` in
+  `deploy/values.dev.yaml` is a PLACEHOLDER (`https://auth.example.com/realms/orders`).
 - E2E locally where the Playwright download is blocked: `E2E_CHROMIUM_PATH=<installed chrome>`
   and `E2E_VIDEO=0` are a local-only workaround; CI must install the matching browser.
 

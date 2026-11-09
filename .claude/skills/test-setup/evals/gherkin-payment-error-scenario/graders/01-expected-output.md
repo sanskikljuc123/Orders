@@ -1,7 +1,0 @@
----
-type: llm
-focus: trace
-weight: 1
----
-
-The result matches this description: Adds a declarative scenario to tests/Orders.E2E/Features (tagged, behaviour-worded, no UI mechanics), reuses existing steps where possible, adds a step that sets the fake payment service to error mode via TestEnvironment, keeps all selectors in page objects using GetByRole/GetByLabel/GetByTestId, uses Expect(...) with no sleeps or per-assertion timeouts, relies on the AfterScenario reset of payment mode, and reports the build/test result or states that dotnet/Docker are unavailable with the exact command.

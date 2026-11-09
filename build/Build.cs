@@ -33,7 +33,8 @@ class Build : NukeBuild
     readonly bool PushImages;
 
     // GitHub Container Registry: ghcr.io/<owner>/<image>, lowercase.
-    const string ImageRegistry = "ghcr.io";
+    [Parameter("Registry for --push-images (default ghcr.io; a local registry can be used to test the push)")]
+    readonly string ImageRegistry = "ghcr.io";
     const string ImageOwner = "sanskikljuc123";
     static readonly (string Project, string Image)[] ContainerImages =
     {
@@ -113,6 +114,22 @@ class Build : NukeBuild
         {
             ChartDir.CreateOrCleanDirectory();
             DotNet($"aspire publish -o {ChartDir} --non-interactive", RootDirectory);
+
+            // Aspire's Kubernetes publisher cannot carry the realm import, so add it to the
+            // generated chart: a post-install/upgrade Job that creates the production realm.
+            var extras = RootDirectory / "deploy" / "chart-extras";
+            foreach (var file in (extras / "templates").GlobFiles("*.yaml"))
+                file.Copy(ChartDir / "templates" / file.Name, ExistsPolicy.FileOverwrite);
+            (extras / "files" / "import-realm.sh").Copy(ChartDir / "files" / "import-realm.sh", ExistsPolicy.FileOverwrite);
+            (RootDirectory / "deploy" / "realms" / "orders-realm.prod.json")
+                .Copy(ChartDir / "files" / "orders-realm.prod.json", ExistsPolicy.FileOverwrite);
+
+            // The import Job must use the same Keycloak image as the generated deployment.
+            var keycloakImage = System.Text.RegularExpressions.Regex.Match(
+                (ChartDir / "templates" / "keycloak" / "deployment.yaml").ReadAllText(),
+                "image: \"([^\"]+)\"").Groups[1].Value;
+            Assert.True((ChartDir / "templates" / "keycloak-realm-import.yaml").ReadAllText().Contains($"image: \"{keycloakImage}\""),
+                $"keycloak-realm-import.yaml must use the chart's Keycloak image {keycloakImage}");
         });
 
     Target Helm => _ => _
@@ -137,9 +154,13 @@ class Build : NukeBuild
             foreach (var (project, image) in ContainerImages)
             {
                 var repository = PushImages ? $"{ImageOwner}/{image}" : image;
-                var registry = PushImages ? $" -p:ContainerRegistry={ImageRegistry}" : "";
-                DotNet($"publish {RootDirectory / "src" / project} -c Release -t:PublishContainer" +
-                       $" -p:ContainerRepository={repository} -p:ContainerImageTag={Version}{registry}");
+                var projectDir = RootDirectory / "src" / project;
+                // Never interpolate a string that contains spaces: NUKE quotes it as ONE argument
+                // (" -p:ContainerRegistry=..." was glued onto the image tag and broke the push).
+                if (PushImages)
+                    DotNet($"publish {projectDir} -c Release -t:PublishContainer -p:ContainerRepository={repository} -p:ContainerImageTag={Version} -p:ContainerRegistry={ImageRegistry}");
+                else
+                    DotNet($"publish {projectDir} -c Release -t:PublishContainer -p:ContainerRepository={repository} -p:ContainerImageTag={Version}");
                 Serilog.Log.Information("Image: {Image}",
                     PushImages ? $"{ImageRegistry}/{repository}:{Version}" : $"{repository}:{Version} (local)");
             }
