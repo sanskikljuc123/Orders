@@ -17,6 +17,8 @@
 # GHCR packages are private by default: either make them public, or give the cluster an
 # imagePullSecret for ghcr.io (a token with read:packages).
 #
-# Before a real deployment, also provision a production Keycloak realm (the test realm is not
-# published).
+# Keycloak: the chart starts Keycloak with no realm (the test realm is never published). Import
+# deploy/realms/orders-realm.prod.json once per environment (admin console: Create realm ->
+# Resource file, or `kc.sh import --file ...`). Replace the placeholder https://orders.example.com
+# with the real URL first; ProductionRealmTests keeps the file free of users and wildcards.
 {}

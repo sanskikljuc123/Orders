@@ -65,7 +65,12 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
 
 **Not done yet** (target state above, current state here):
 - Only `deploy/values.dev.yaml` exists; image tags are passed with `--set` at deploy time.
-  There is no production Keycloak realm (the test realm is not published).
+  Production Keycloak realm: `deploy/realms/orders-realm.prod.json` (no users, HTTPS required,
+  exact redirect `https://orders.example.com/signin-oidc` = PLACEHOLDER URL, brute-force
+  protection, no password grant), guarded by `ProductionRealmTests`. It is imported by hand per
+  environment; the chart does not mount it.
+- API OIDC options are dev-oriented (`RequireHttpsMetadata = false`, `ResponseMode = query`,
+  Lax cookies); review them before a real HTTPS deployment.
 - E2E locally where the Playwright download is blocked: `E2E_CHROMIUM_PATH=<installed chrome>`
   and `E2E_VIDEO=0` are a local-only workaround; CI must install the matching browser.
 
