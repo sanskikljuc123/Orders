@@ -64,9 +64,9 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
   realm: no test users, exact redirect URIs, HTTPS required, brute-force protection on.
 
 **Not done yet** (target state above, current state here):
-- NUKE has `Compile`, `UnitTests`, `IntegrationTests`, `CoverageGate`, `InstallBrowser`,
-  `E2ETests`, `Test` (default). `Publish` and `Helm` are missing (phase 7).
-- No `deploy/values.<env>.yaml` and no README with the phase-1 smoke check yet.
+- Only `deploy/values.dev.yaml` exists, with no image registry/tags yet; there is no
+  production Keycloak realm (the test realm is not published).
+- No README with the phase-1 smoke check yet.
 - E2E locally where the Playwright download is blocked: `E2E_CHROMIUM_PATH=<installed chrome>`
   and `E2E_VIDEO=0` are a local-only workaround; CI must install the matching browser.
 
@@ -84,7 +84,10 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
 7. Helm via `aspire publish`. GATE: `helm lint` + `helm template` OK.
 
 ## Commands (fill in as they are verified)
-- Build: `dotnet build` | Full pipeline (same as CI): `./build.sh` (`--target UnitTests` etc.)
+- Build: `dotnet build` | Full pipeline (same as CI): `./build.sh --target Test Helm`
+- Helm chart (needs Helm 3.22.1 on PATH): `./build.sh --target Helm [--environment dev]`
+  runs `aspire publish -o k8s-artifacts` + `helm lint` + `helm template`. `k8s-artifacts/` is
+  git-ignored because it contains generated passwords; never commit it.
 - Coverage floors (branch, Orders.Api): unit 25%, integration 70%; raise with real tests
   (`--unit-branch-floor`, `--integration-branch-floor`).
 - Tests: `dotnet test`
