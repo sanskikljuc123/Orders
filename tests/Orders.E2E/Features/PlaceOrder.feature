@@ -14,3 +14,8 @@ Feature: Placing an order
     Given the payment service approves payments
     When I order 1 without a product name
     Then I see the result "Validation error"
+
+    
+  Scenario: Ordering without logging in is rejected
+    When I place an order without logging in
+    Then the request is rejected with status 401
