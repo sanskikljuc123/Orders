@@ -215,3 +215,6 @@ public class HttpPaymentClient(HttpClient http) : IPaymentClient
 }
 
 public record ChargeResponse(bool Approved);
+
+// Lets WebApplicationFactory<Program> in tests/Orders.IntegrationTests reach the top-level Program.
+public partial class Program { }
