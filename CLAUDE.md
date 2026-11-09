@@ -28,12 +28,13 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
 | Layer | Project | Runs | External services mocked with |
 |---|---|---|---|
 | Unit | tests/Orders.UnitTests | in-process | FakeItEasy |
-| Integration | tests/Orders.IntegrationTests | in-process (WebApplicationFactory) + Testcontainers | FakeItEasy via Autofac `ConfigureTestContainer` |
+| Integration | tests/Orders.IntegrationTests | in-process (WebApplicationFactory) + Testcontainers | FakeItEasy, replaced where the real service is registered: `ConfigureTestServices` for `builder.Services` (e.g. `IPaymentClient`), Autofac `ConfigureTestContainer` for container registrations |
 | E2E | tests/Orders.E2E | Aspire separate processes + Playwright | `FakePaymentService` project (real process) |
 | Browser-side calls | any Playwright test | browser | `Page.RouteAsync` |
 
 - Aspire tests run the app as separate processes: DI replacement / FakeItEasy does NOT work there.
 - Testcontainers = single-service integration tests. Aspire = whole-system E2E and local dev.
+- Writing or setting up tests: use the `test-setup` skill (`.claude/skills/test-setup/`).
 
 ## Gherkin / Playwright conventions
 - Features in `tests/Orders.E2E/Features`, steps in `Steps`, page objects in `Pages`, hooks in `Hooks`.
@@ -58,6 +59,16 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
 - Deploy: `aspire publish -o <dir>` then `helm upgrade --install ... -f deploy/values.<env>.yaml`.
   Do NOT rely on `aspire deploy` for Kubernetes until it is proven stable here.
 - Logging: Serilog structured logs; never log secrets/tokens.
+- Keycloak: the test realm (`src/Orders.AppHost/Realms`, users ana/bob with known passwords) is
+  imported only for local runs and tests, never in `aspire publish`. A deployment needs its own
+  realm: no test users, exact redirect URIs, HTTPS required, brute-force protection on.
+
+**Not done yet** (target state above, current state here):
+- CI (`.github/workflows/ci.yml`) calls `dotnet build` directly, not `./build.sh`; `build.sh`
+  is not executable in git. Fix in phase 6.
+- NUKE has only `ComputeVersion`, `Restore`, `Compile`. `Test`, `Publish`, `Helm` are missing.
+- No `deploy/values.<env>.yaml` and no README with the phase-1 smoke check yet.
+- Tests were removed to re-run phases 3-5 with the `test-setup` skill; those gates are open.
 
 ## Phases (each ends with a GATE; do not skip)
 0. Foundation: solution, global.json, props, GitVersion, .gitignore, NUKE skeleton.
