@@ -64,8 +64,8 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
   realm: no test users, exact redirect URIs, HTTPS required, brute-force protection on.
 
 **Not done yet** (target state above, current state here):
-- Only `deploy/values.dev.yaml` exists, with no image registry/tags yet; there is no
-  production Keycloak realm (the test realm is not published).
+- Only `deploy/values.dev.yaml` exists; image tags are passed with `--set` at deploy time.
+  There is no production Keycloak realm (the test realm is not published).
 - E2E locally where the Playwright download is blocked: `E2E_CHROMIUM_PATH=<installed chrome>`
   and `E2E_VIDEO=0` are a local-only workaround; CI must install the matching browser.
 
@@ -89,6 +89,9 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
 - Helm chart (needs Helm 3.22.1 on PATH): `./build.sh --target Helm [--environment dev]`
   runs `aspire publish -o k8s-artifacts` + `helm lint` + `helm template`. `k8s-artifacts/` is
   git-ignored because it contains generated passwords; never commit it.
+- Container images: `./build.sh --target Images` builds `orders-api` and `orders-payment` into
+  local Docker (.NET SDK container support, no Dockerfile). CI on main adds `--push-images true`
+  and pushes to `ghcr.io/sanskikljuc123/<image>:<SemVer>` with `GITHUB_TOKEN`.
 - Coverage floors (branch, Orders.Api): unit 25%, integration 70%; raise with real tests
   (`--unit-branch-floor`, `--integration-branch-floor`).
 - Tests: `dotnet test`
