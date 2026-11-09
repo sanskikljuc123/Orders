@@ -9,6 +9,14 @@
 # Payment: the chart deploys FakePaymentService, and templates/api/config.yaml already points the
 # API at http://payment-service:<port>. Nothing to override here.
 #
-# Before a real deployment, set image registry/tags here (the chart defaults to api:latest and
-# payment:latest) and provision a production Keycloak realm (the test realm is not published).
+# Images: CI pushes ghcr.io/sanskikljuc123/orders-api and ghcr.io/sanskikljuc123/orders-payment on
+# every push to main, tagged with the GitVersion SemVer. Pick the version when deploying (the
+# chart defaults to api:latest / payment:latest, which are never pushed):
+#   --set parameters.api.api_image=ghcr.io/sanskikljuc123/orders-api:<version> \
+#   --set parameters.payment.payment_image=ghcr.io/sanskikljuc123/orders-payment:<version>
+# GHCR packages are private by default: either make them public, or give the cluster an
+# imagePullSecret for ghcr.io (a token with read:packages).
+#
+# Before a real deployment, also provision a production Keycloak realm (the test realm is not
+# published).
 {}

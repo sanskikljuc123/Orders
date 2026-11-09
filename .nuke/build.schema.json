@@ -29,6 +29,7 @@
         "CoverageGate",
         "E2ETests",
         "Helm",
+        "Images",
         "InstallBrowser",
         "IntegrationTests",
         "Publish",
@@ -120,6 +121,10 @@
           "type": "number",
           "description": "Minimum branch coverage % from integration tests",
           "format": "double"
+        },
+        "PushImages": {
+          "type": "boolean",
+          "description": "Push container images to ghcr.io (CI sets this on pushes to main only)"
         },
         "UnitBranchFloor": {
           "type": "number",

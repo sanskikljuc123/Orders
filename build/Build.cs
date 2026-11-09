@@ -29,6 +29,18 @@ class Build : NukeBuild
     AbsolutePath ResultsDir => RootDirectory / "TestResults";
     AbsolutePath ChartDir => RootDirectory / "k8s-artifacts";   // generated, git-ignored (contains generated passwords)
 
+    [Parameter("Push container images to ghcr.io (CI sets this on pushes to main only)")]
+    readonly bool PushImages;
+
+    // GitHub Container Registry: ghcr.io/<owner>/<image>, lowercase.
+    const string ImageRegistry = "ghcr.io";
+    const string ImageOwner = "sanskikljuc123";
+    static readonly (string Project, string Image)[] ContainerImages =
+    {
+        ("Orders.Api", "orders-api"),
+        ("FakePaymentService", "orders-payment"),
+    };
+
     [Parameter("Environment for deploy/values.<env>.yaml")]
     readonly string Environment = "dev";
 
@@ -113,6 +125,24 @@ class Build : NukeBuild
             var helm = ToolResolver.GetPathTool("helm");
             helm($"lint {ChartDir} -f {values}");
             helm($"template orders {ChartDir} -f {values}", logOutput: false);
+        });
+
+    Target Images => _ => _
+        .DependsOn(ComputeVersion)
+        .Executes(() =>
+        {
+            // .NET SDK container support (no Dockerfile). Without --push-images the images go to the
+            // local Docker daemon, which proves they build; with it they are pushed to ghcr.io.
+            // Registry login comes from DOTNET_CONTAINER_REGISTRY_UNAME / _PWORD (set by CI).
+            foreach (var (project, image) in ContainerImages)
+            {
+                var repository = PushImages ? $"{ImageOwner}/{image}" : image;
+                var registry = PushImages ? $" -p:ContainerRegistry={ImageRegistry}" : "";
+                DotNet($"publish {RootDirectory / "src" / project} -c Release -t:PublishContainer" +
+                       $" -p:ContainerRepository={repository} -p:ContainerImageTag={Version}{registry}");
+                Serilog.Log.Information("Image: {Image}",
+                    PushImages ? $"{ImageRegistry}/{repository}:{Version}" : $"{repository}:{Version} (local)");
+            }
         });
 
     Target Test => _ => _
