@@ -13,7 +13,7 @@ Helm + Kubernetes (deploy via `aspire publish` + `helm`)
 | Layer | Project | Runs | External services mocked with |
 |---|---|---|---|
 | Unit | `tests/<App>.UnitTests` | in-process | FakeItEasy |
-| Integration | `tests/<App>.IntegrationTests` | in-process (WebApplicationFactory) + Testcontainers | FakeItEasy via Autofac `ConfigureTestContainer` |
+| Integration | `tests/<App>.IntegrationTests` | in-process (WebApplicationFactory) + Testcontainers | FakeItEasy, replaced where the real service is registered (see §3) |
 | E2E | `tests/<App>.E2E` | Aspire, separate processes + Playwright | Fake service project (real process) |
 | Browser-side calls | any Playwright test | browser | `Page.RouteAsync` |
 
@@ -118,10 +118,17 @@ public class OrdersApiFactory : WebApplicationFactory<Program>
 }
 ```
 
-With **Autofac** as the DI container, register fakes with
-`builder.ConfigureTestContainer<ContainerBuilder>(b => b.RegisterInstance(Payment).As<IPaymentClient>())`;
-Autofac registrations can override `ConfigureTestServices` ones. Check which one actually takes
-effect by running a test that depends on the fake.
+**Replace the service where the real one is registered** — find it in `Program.cs` first:
+
+| Real registration | Replace with |
+|---|---|
+| `builder.Services.Add...<IPaymentClient, ...>()` (also with Autofac as the provider) | `ConfigureTestServices` + `RemoveAll<T>()` + `AddSingleton(fake)` (above) |
+| Autofac `ContainerBuilder` / module (`c.RegisterType<...>().As<IPaymentClient>()`) | `builder.ConfigureTestContainer<ContainerBuilder>(b => b.RegisterInstance(Payment).As<IPaymentClient>())` |
+
+Autofac registrations win over `IServiceCollection` ones, so a fake added in the wrong place is
+silently ignored and tests run against the real client. **Prove the fake is used** with one
+test whose result depends on it (e.g. fake declines → order is `PaymentFailed`); if the real
+client were used, that test fails.
 
 Real infrastructure variant — containers started once per collection:
 
