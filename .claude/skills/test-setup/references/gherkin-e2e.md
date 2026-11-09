@@ -27,6 +27,8 @@ tests/<App>.E2E/
 
 Packages (versions only in `Directory.Packages.props`): `Reqnroll.xUnit`, `Microsoft.Playwright`,
 `Aspire.Hosting.Testing`, `xunit`, `xunit.runner.visualstudio`, `Microsoft.NET.Test.Sdk`.
+Reqnroll generates a `*.feature.cs` next to each feature at build time — make sure `.gitignore`
+covers `*.feature.cs`.
 
 ## 2. Writing features
 
@@ -61,14 +63,21 @@ Feature: Order privacy
   Scenario Outline: A user never sees another user's orders
     Given "<other>" has ordered "<secret>"
     And I am signed in as "<user>"
+    And I have ordered "<mine>"
     When I open my orders
-    Then my order list does not contain "<secret>"
+    Then my order list contains my order
+    And my order list does not contain "<secret>"
 
     Examples:
-      | user | other | secret            |
-      | ana  | bob   | Bobs secret order |
-      | bob  | ana   | Anas secret order |
+      | user | other | mine       | secret            |
+      | ana  | bob   | Anas order | Bobs secret order |
+      | bob  | ana   | Bobs order | Anas secret order |
 ```
+
+**Never rely on a negative check alone.** "does not contain X" also passes when the list never
+loaded or the page shows an error. Pair it with a positive check on the same element ("contains
+my order") and open the page with `page.RunAndWaitForResponseAsync(...)` for the list request, so
+the assertion runs against loaded data.
 
 - **Declarative, not imperative.** `When I order 2 of "Book"` — not `When I fill "#product"
   with "Book" and click "Submit"`. UI changes then touch page objects, not features.
@@ -116,6 +125,23 @@ public class OrderSteps(ScenarioBrowser sb)          // context injection: fresh
 - Group steps by domain, not by feature file. Delete unused steps (Reqnroll reports them).
 - Data tables: `DataTable` + `CreateSet<T>()` / `CreateInstance<T>()` (`Reqnroll.Assist`) for
   structured input rather than many parameters.
+- **Unique data without ugly features.** Keep readable names in Gherkin ("Book") and make them
+  unique inside the step; remember the real value in an injected per-scenario object so later
+  steps assert on it:
+
+  ```csharp
+  public class OrderContext { public string? LastProduct { get; set; } }   // one instance per scenario
+
+  [When("I order {int} of {string}")]
+  public async Task Order(int quantity, string product)
+  {
+      ordered.LastProduct = $"{product} {Guid.NewGuid().ToString("N")[..8]}";
+      await Orders.PlaceOrderAsync(ordered.LastProduct, quantity);
+  }
+
+  [Then("my order list contains my order")]
+  public Task ListContainsMine() => Assertions.Expect(Orders.MyOrders).ToContainTextAsync(ordered.LastProduct!);
+  ```
 - Setting up data the scenario doesn't test (e.g. "bob has ordered X") may go through the API
   or a separate browser context — faster and less flaky than clicking through the UI.
 
@@ -142,8 +168,11 @@ public class OrderPage(IPage page)
   No brittle CSS/XPath. Missing a good hook? Add a `data-testid` or accessible label to the app.
 - Exception: third-party pages you don't own (e.g. Keycloak's login form, `#username`) —
   isolate them in one method with a comment.
-- **Explore the live UI first** with `playwright-cli` and its skills
-  (`playwright-cli install --skills`) to find real roles/labels/test ids before writing selectors.
+- **Explore the live UI before writing the page object**, with `playwright-cli` and its skills
+  (`playwright-cli install --skills`), to find real roles, labels and test ids. If the tool isn't
+  installed and you can't verify how to install it, don't guess: ask the user, or read the
+  markup (e.g. `wwwroot/*.html`, Razor views) and treat every selector as unverified until a green
+  run and a mutation check confirm it. Say which you did in the report.
 - Methods express user intent (`PlaceOrderAsync`), and expose locators for assertions;
   page objects don't assert.
 - Always relative URLs in `GotoAsync`; `BaseURL` is set on the context.
@@ -166,7 +195,7 @@ public class ScenarioHooks(ScenarioBrowser sb, ScenarioContext scenario)
     [AfterScenario]
     public async Task Close()
     {
-        try { await sb.SaveArtifactsAsync(scenario.ScenarioInfo.Title, failed: scenario.TestError is not null); }
+        try { await sb.SaveArtifactsAsync(ArtifactName(scenario), failed: scenario.TestError is not null); }   // title + example values, see §8
         finally
         {
             await sb.Context.CloseAsync();
@@ -176,14 +205,16 @@ public class ScenarioHooks(ScenarioBrowser sb, ScenarioContext scenario)
 }
 ```
 
-`TestEnvironment.StartAsync` (Aspire):
+`TestEnvironment.StartAsync` (Aspire) — one timeout covers **every** startup call, so a stuck
+resource fails the run with an error instead of hanging silently:
 
 ```csharp
-var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.App_AppHost>();
-_app = await builder.BuildAsync();
-await _app.StartAsync();
-await _app.ResourceNotifications.WaitForResourceHealthyAsync("api").WaitAsync(TimeSpan.FromMinutes(5));
-ApiUrl = _app.GetEndpoint("api", "http").ToString();
+using var startup = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.App_AppHost>(startup.Token);
+_app = await builder.BuildAsync(startup.Token);
+await _app.StartAsync(startup.Token);
+await _app.ResourceNotifications.WaitForResourceHealthyAsync("api", startup.Token);
+ApiUrl = _app.GetEndpoint("api", "http").ToString();   // ports are randomised in tests: always ask, never hardcode
 _playwright = await Playwright.CreateAsync();
 Browser = await _playwright.Chromium.LaunchAsync(new() { Headless = Environment.GetEnvironmentVariable("HEADED") != "1" });
 ```
@@ -192,7 +223,11 @@ Browser = await _playwright.Chromium.LaunchAsync(new() { Headless = Environment.
   Replace external services with a fake service project in the AppHost (see `dotnet.md` §5);
   give it a test-only control endpoint and reset it in `[AfterScenario]`.
 - Browser-side calls to third parties: `Page.RouteAsync(...)` to fulfil them.
-- Wait on resource health (add health checks to resources) instead of polling loops/sleeps.
+- Wait on resource health instead of polling loops/sleeps. In the AppHost:
+  `.WithHttpHealthCheck("/health", endpointName: "http")` (plus an anonymous `/health` endpoint in
+  the service). Pass `endpointName: "http"` — otherwise the check may use the https endpoint, never
+  pass with an untrusted dev certificate, and every `WaitFor(...)` on that resource hangs. Adding a
+  health check also changes what other resources' `WaitFor` waits on (healthy, not just started).
 - **Each scenario isolated**: fresh `BrowserContext` (own cookies/storage), unique data
   (`$"Book-{Guid.NewGuid():N}"` when names must not collide), cleanup in `finally`, never depend
   on another scenario having run.
@@ -251,6 +286,14 @@ Context = await TestEnvironment.Browser.NewContextAsync(new()
 await Context.Tracing.StartAsync(new() { Screenshots = true, Snapshots = true, Sources = true });
 ```
 
+Name artifacts from the title **plus the example values**, or Scenario Outline rows overwrite
+each other:
+
+```csharp
+var args = scenario.ScenarioInfo.Arguments.Values.Cast<object>().Select(v => v?.ToString());
+var name = SafeFileName(string.Join(" ", new[] { scenario.ScenarioInfo.Title }.Concat(args)));
+```
+
 On failure: full-page screenshot, `Tracing.StopAsync(new() { Path = $"{name}.zip" })`, close the
 context, then `await page.Video!.SaveAsAsync($"{name}.webm")`. On success: `Tracing.StopAsync()`
 without a path, close, `await page.Video!.DeleteAsync()`. CI uploads the artifacts folder with
@@ -263,6 +306,12 @@ headed (`HEADED=1`) with `SlowMo`.
 
 - Install browsers after build: `pwsh tests/<App>.E2E/bin/Debug/net10.0/playwright.ps1 install chromium`
   (`--with-deps` on CI). Browser/Docker image version must match the `Microsoft.Playwright` package.
+- **Video needs Playwright's ffmpeg** for the same package version. A missing or mismatched ffmpeg
+  makes every scenario fail with a confusing error — install it with the browser.
+- **Browser download blocked** (offline machine, proxy refuses the Playwright CDN): report the
+  exact host. A local-only escape hatch is an opt-in `ExecutablePath` from an environment variable
+  (e.g. `E2E_CHROMIUM_PATH`) and a switch to turn video off. Label it as a deviation from the
+  "browser matches the package" rule; CI must still install the matching browser.
 - Reqnroll exposes tags as xUnit traits (`Category`): `dotnet test tests/<App>.E2E --filter "Category=smoke"`.
   Confirm against the generated code if a filter selects nothing.
 - Run the suite twice before declaring it stable; a scenario that fails once in N runs is a bug
