@@ -117,6 +117,10 @@
           "type": "string",
           "description": "Environment for deploy/values.<env>.yaml"
         },
+        "ImageRegistry": {
+          "type": "string",
+          "description": "Registry for --push-images (default ghcr.io; a local registry can be used to test the push)"
+        },
         "IntegrationBranchFloor": {
           "type": "number",
           "description": "Minimum branch coverage % from integration tests",

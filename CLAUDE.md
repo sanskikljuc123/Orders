@@ -56,6 +56,10 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
 - NUKE (`build/`) is the single entry point: Restore, Compile, Test, Publish, Helm.
   GitHub Actions only calls `./build.sh` / `./build.cmd`.
 - Version comes from GitVersion into NUKE.
+- NUKE commands: never interpolate a value that contains spaces (e.g. `$" --flag"`) into
+  `DotNet($"...")` / tool calls; NUKE quotes it as ONE argument. Write the full command per case.
+  (Broke `InstallBrowser` and the ghcr.io push.) Test the push path with
+  `./build.sh --target Images --push-images true --image-registry localhost:5000` and a local `registry:2`.
 - Deploy: `aspire publish -o <dir>` then `helm upgrade --install ... -f deploy/values.<env>.yaml`.
   Do NOT rely on `aspire deploy` for Kubernetes until it is proven stable here.
 - Logging: Serilog structured logs; never log secrets/tokens.
