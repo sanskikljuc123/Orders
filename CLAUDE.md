@@ -66,7 +66,6 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
 **Not done yet** (target state above, current state here):
 - Only `deploy/values.dev.yaml` exists, with no image registry/tags yet; there is no
   production Keycloak realm (the test realm is not published).
-- No README with the phase-1 smoke check yet.
 - E2E locally where the Playwright download is blocked: `E2E_CHROMIUM_PATH=<installed chrome>`
   and `E2E_VIDEO=0` are a local-only workaround; CI must install the matching browser.
 
@@ -84,6 +83,8 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
 7. Helm via `aspire publish`. GATE: `helm lint` + `helm template` OK.
 
 ## Commands (fill in as they are verified)
+- Run app: `dotnet tool restore` then `dotnet aspire run` (API/UI http://localhost:5189; smoke check in README).
+  Plain `dotnet run --project src/Orders.AppHost` aborted (exit 134) in the cloud dev container.
 - Build: `dotnet build` | Full pipeline (same as CI): `./build.sh --target Test Helm`
 - Helm chart (needs Helm 3.22.1 on PATH): `./build.sh --target Helm [--environment dev]`
   runs `aspire publish -o k8s-artifacts` + `helm lint` + `helm template`. `k8s-artifacts/` is
