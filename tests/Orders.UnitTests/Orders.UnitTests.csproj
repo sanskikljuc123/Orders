@@ -22,6 +22,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Production Keycloak realm, guarded by ProductionRealmTests. -->
+    <None Include="..\..\deploy\realms\orders-realm.prod.json" Link="Realms\orders-realm.prod.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Orders.Api\Orders.Api.csproj" />
   </ItemGroup>
 
