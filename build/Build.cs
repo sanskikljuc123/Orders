@@ -113,6 +113,22 @@ class Build : NukeBuild
         {
             ChartDir.CreateOrCleanDirectory();
             DotNet($"aspire publish -o {ChartDir} --non-interactive", RootDirectory);
+
+            // Aspire's Kubernetes publisher cannot carry the realm import, so add it to the
+            // generated chart: a post-install/upgrade Job that creates the production realm.
+            var extras = RootDirectory / "deploy" / "chart-extras";
+            foreach (var file in (extras / "templates").GlobFiles("*.yaml"))
+                file.Copy(ChartDir / "templates" / file.Name, ExistsPolicy.FileOverwrite);
+            (extras / "files" / "import-realm.sh").Copy(ChartDir / "files" / "import-realm.sh", ExistsPolicy.FileOverwrite);
+            (RootDirectory / "deploy" / "realms" / "orders-realm.prod.json")
+                .Copy(ChartDir / "files" / "orders-realm.prod.json", ExistsPolicy.FileOverwrite);
+
+            // The import Job must use the same Keycloak image as the generated deployment.
+            var keycloakImage = System.Text.RegularExpressions.Regex.Match(
+                (ChartDir / "templates" / "keycloak" / "deployment.yaml").ReadAllText(),
+                "image: \"([^\"]+)\"").Groups[1].Value;
+            Assert.True((ChartDir / "templates" / "keycloak-realm-import.yaml").ReadAllText().Contains($"image: \"{keycloakImage}\""),
+                $"keycloak-realm-import.yaml must use the chart's Keycloak image {keycloakImage}");
         });
 
     Target Helm => _ => _

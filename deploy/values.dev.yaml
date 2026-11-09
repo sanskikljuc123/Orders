@@ -17,10 +17,11 @@
 # GHCR packages are private by default: either make them public, or give the cluster an
 # imagePullSecret for ghcr.io (a token with read:packages).
 #
-# Keycloak: the chart starts Keycloak with no realm (the test realm is never published). Import
-# deploy/realms/orders-realm.prod.json once per environment (admin console: Create realm ->
-# Resource file, or `kc.sh import --file ...`). Replace the placeholder https://orders.example.com
-# with the real URL first; ProductionRealmTests keeps the file free of users and wildcards.
+# Keycloak: the test realm is never published. The chart gets a post-install/upgrade Job
+# (deploy/chart-extras, added by the NUKE Publish target) that creates the production realm from
+# deploy/realms/orders-realm.prod.json if it does not exist yet; an existing realm is left as is.
+# Replace the placeholder https://orders.example.com with the real URL first;
+# ProductionRealmTests keeps the file free of users and wildcards.
 #
 # Auth: outside Development the API requires HTTPS for Keycloak metadata (Auth:AllowInsecureHttp is
 # only on in appsettings.Development.json), so the chart's internal http://keycloak-service:8080

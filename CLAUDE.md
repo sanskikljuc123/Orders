@@ -67,8 +67,10 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
 - Only `deploy/values.dev.yaml` exists; image tags are passed with `--set` at deploy time.
   Production Keycloak realm: `deploy/realms/orders-realm.prod.json` (no users, HTTPS required,
   exact redirect `https://orders.example.com/signin-oidc` = PLACEHOLDER URL, brute-force
-  protection, no password grant), guarded by `ProductionRealmTests`. It is imported by hand per
-  environment; the chart does not mount it.
+  protection, no password grant), guarded by `ProductionRealmTests`. Aspire's publisher cannot
+  carry a realm import (it breaks `aspire publish`), so the NUKE Publish target adds
+  `deploy/chart-extras` to the generated chart: a Helm post-install/upgrade Job that creates the
+  realm with `kcadm.sh` if missing (never overwrites). Its Keycloak image must match the chart's.
 - API login settings: secure by default (HTTPS metadata, `form_post`, Secure cookies). Plain-http
   settings only via `Auth:AllowInsecureHttp` in `appsettings.Development.json` (local runs, tests).
   Guarded by `AuthSecurityOptionsTests`. Deployed Keycloak needs HTTPS: `Auth__Authority` in
