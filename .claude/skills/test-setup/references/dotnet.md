@@ -138,10 +138,13 @@ public class StackCollection : ICollectionFixture<StackFixture> { }
 
 public class StackFixture : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _db = new PostgreSqlBuilder().WithImage("postgres:17").Build();
+    private readonly PostgreSqlContainer _db = new PostgreSqlBuilder("postgres:17").Build();
+    private readonly KeycloakContainer _keycloak = new KeycloakBuilder("quay.io/keycloak/keycloak:26.6")
+        .WithRealm(Path.Combine(AppContext.BaseDirectory, "Realms", "orders-realm.json"))   // realm JSON copied to output
+        .Build();
 
-    public Task InitializeAsync() => _db.StartAsync();
-    async Task IAsyncLifetime.DisposeAsync() => await _db.DisposeAsync();
+    public Task InitializeAsync() => Task.WhenAll(_db.StartAsync(), _keycloak.StartAsync());
+    async Task IAsyncLifetime.DisposeAsync() { await _db.DisposeAsync(); await _keycloak.DisposeAsync(); }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder) =>
         builder.UseSetting("ConnectionStrings:ordersdb", _db.GetConnectionString());
@@ -164,15 +167,17 @@ public class OrdersDatabaseTests(StackFixture fixture) { ... }
       public OrdersDatabaseTests(StackFixture fixture)
       {
           _fixture = fixture;
-          Fake.ClearConfiguration(fixture.Payment);   // no behaviour left over from another test
-          Fake.ClearRecordedCalls(fixture.Payment);   // MustHaveHappened only sees this test's calls
+          Fake.Reset(fixture.Payment);   // clears configured behaviour AND recorded calls
       }
   }
   ```
   Each test then configures exactly the behaviour it needs. This only works because tests in
   one collection run sequentially; if a fixture's tests can run in parallel, don't share a fake —
   give each test its own factory or a per-test fake.
-- Pin container image tags (`postgres:17`, `keycloak:26.x`), never `latest`.
+- Testcontainers 4.x takes the image in the builder constructor (`new PostgreSqlBuilder("postgres:17")`);
+  the parameterless constructor + `.WithImage(...)` is the older style. Keycloak imports a realm
+  with `.WithRealm(path)`. Check the package's XML docs for the installed version.
+- Pin container image tags (`postgres:17`, `keycloak:26.6`), never `latest`.
 - Tests sharing a container must use unique data (`$"Book-{Guid.NewGuid():N}"`) and must not
   assert on global counts ("list has 3 items") — assert `Contains` / `DoesNotContain` on own data.
 - Auth (Keycloak or other OIDC): import a test realm into the container, get tokens with the

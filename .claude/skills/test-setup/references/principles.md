@@ -94,6 +94,7 @@ The reasoning behind the workflow in SKILL.md.
 | Selectors in step definitions | UI change breaks many steps | Selectors only in page objects |
 | Imperative Gherkin ("click Submit") | Brittle, unreadable for business | Declarative behaviour steps |
 | Weak assertions (`IsValid == false` only) | Passes for the wrong reason | Assert which rule/message failed |
+| Negative-only assertions ("does not contain X") | Pass when the page never loaded | Pair with a positive check on loaded data |
 | Calling real third-party services | Flaky, costly, side effects | FakeItEasy / fake service / `RouteAsync` |
 | Not cleaning up | Polluted DB, follow-on failures | Teardown in `finally` / fixtures |
 | Catch-all `try { } catch { }` | Hides real failures | Catch the specific exception and assert |

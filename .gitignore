@@ -481,3 +481,24 @@ $RECYCLE.BIN/
 *.swp
 k8s-artifacts/
 *.feature.cs
+
+# ---- Secrets and local-only config ----
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+secrets.json
+appsettings.Local.json
+kubeconfig
+*.kubeconfig
+
+# ---- Test output that can contain sessions, tokens or user data ----
+playwright-artifacts/
+.auth/
+*storage-state*.json
+coveragereport/
+
+# ---- Tool-local files ----
+.claude/settings.local.json
+.nuke/temp/

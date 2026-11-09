@@ -8,8 +8,15 @@ if (builder.ExecutionContext.IsPublishMode)
     builder.AddKubernetesEnvironment("k8s");
 }
 
-var keycloak = builder.AddKeycloak("keycloak", 8080)
-    .WithRealmImport("Realms");
+var keycloak = builder.AddKeycloak("keycloak", 8080);
+
+// The test realm contains users with known passwords (ana/bob), sslRequired=none and
+// redirectUris="*". It is for local runs and tests only and must never reach a deployment.
+// A deployed environment needs its own realm, provisioned separately.
+if (!builder.ExecutionContext.IsPublishMode)
+{
+    keycloak.WithRealmImport("Realms");
+}
 
 var postgres = builder.AddPostgres("postgres");
 var ordersDb = postgres.AddDatabase("ordersdb");

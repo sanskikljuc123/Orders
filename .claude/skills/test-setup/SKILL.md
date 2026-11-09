@@ -11,12 +11,18 @@ ten flaky ones; a suite people don't trust gets rubber-stamped, which is worse t
 
 Work in small steps. After each step, build/run and look at the real output before moving on.
 
+**Respect the project's phases.** If project instructions split work into phases or gates
+(e.g. "unit → integration → E2E → CI, ask before the next"), they win over this skill's step
+order: finish the current phase, run its gate, report, and ask before starting the next — even
+if a later step below (CI, coverage gate) would normally follow.
+
 ## Step 1 — Read what is already there
 
-Run the detector from the skill directory against the repo root:
+Run the detector against the repo root. For a skill stored in the repo, `<skill-dir>` is
+`.claude/skills/test-setup`:
 
 ```bash
-python3 <skill-dir>/scripts/detect_stack.py <repo-root>
+python3 .claude/skills/test-setup/scripts/detect_stack.py .
 ```
 
 It lists .NET projects, test packages (xUnit, FakeItEasy, Reqnroll, Playwright, Testcontainers…),
@@ -27,6 +33,10 @@ central version files, feature files, test folders and CI. Then read, in this or
 3. 2–3 existing test files and one `.feature` end to end, to learn the house style: test naming,
    assertion style, fixture and fake patterns, step wording, page-object shape.
 4. CI config and the build entry point (NUKE/`build.sh`), to see how tests run today.
+5. Stale references: the solution, CI or build targets may still point at test projects that no
+   longer exist — the build then fails before you start. Also check git history
+   (`git log --diff-filter=D --stat -- tests/`) for deleted tests; ask the user whether to
+   reuse them or start fresh instead of deciding silently.
 
 **Match what exists.** If the repo uses xUnit + FakeItEasy, do not introduce NUnit + Moq. Reuse
 existing steps and page objects before adding new ones. Only bring in a new package when nothing
@@ -100,7 +110,7 @@ Write a small, high-value set first (the "would hurt" list), get it green, then 
   `MustHaveHappened` on a fake only when that call *is* the contract (e.g. "charges 30.00").
 - **Gherkin is user language**: steps describe behaviour (`When I order 2 of "Book"`), never
   clicks or selectors. Selectors live only in page objects (`GetByRole`, `GetByLabel`,
-  `GetByTestId`). Explore the live UI with `playwright-cli` before writing selectors.
+  `GetByTestId`). Explore the live UI (see `gherkin-e2e.md` §4) *before* writing the page object.
 - **Parameterize** with `[Theory]`/`[InlineData]` and `Scenario Outline`/`Examples`.
 - **Cover the failure path**: validation errors, 401/403/404, payment declined/error.
 - **Each test owns its data** and cleans up; never depend on another test running first.
@@ -122,6 +132,8 @@ plainly, give the exact command, and don't report it as passing.
 ## Step 7 — Wire into CI
 
 - Add targets to the build entry point (NUKE); CI only calls `./build.sh` / `./build.cmd`.
+  Check `git diff` after the first NUKE run — it can rewrite `build/_build.csproj`; revert
+  changes you didn't intend.
 - Upload `.trx` results and Playwright traces, screenshots and videos with `if: always()`.
 - Install Playwright browsers matching the `Microsoft.Playwright` package version.
 - Add a **coverage gate** (coverlet) at the current level, branch coverage on critical code, as a
@@ -135,6 +147,8 @@ plainly, give the exact command, and don't report it as passing.
 - [ ] No real external network in unit tests; no real third-party services anywhere.
 - [ ] No catch-all `try { } catch { }` that swallows failures in tests, steps or hooks.
 - [ ] Edge and error cases covered, not only the happy path.
+- [ ] No negative-only assertions: every "does not contain / is not visible" is paired with a
+      positive check proving the data actually loaded.
 - [ ] Tests are independent: pass alone and in any order; fresh browser context per scenario.
 - [ ] Test data and side effects (rows, files, fake-service modes) are cleaned up.
 - [ ] Names describe requirements; no dead, skipped or commented-out tests or unused steps.

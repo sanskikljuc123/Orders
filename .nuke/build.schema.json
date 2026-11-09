@@ -26,12 +26,7 @@
       "enum": [
         "Compile",
         "ComputeVersion",
-        "E2ETests",
-        "InstallBrowser",
-        "IntegrationTests",
-        "Restore",
-        "Test",
-        "UnitTests"
+        "Restore"
       ]
     },
     "Verbosity": {
