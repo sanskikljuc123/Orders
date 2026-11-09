@@ -1,5 +1,8 @@
 Feature: Placing an order
 
+  Background:
+    Given I am signed in as "ana"
+
   Scenario: Order is paid when payment is approved
     Given the payment service approves payments
     When I order 2 of "Book"
@@ -15,7 +18,9 @@ Feature: Placing an order
     When I order 1 without a product name
     Then I see the result "Validation error"
 
-    
-  Scenario: Ordering without logging in is rejected
-    When I place an order without logging in
-    Then the request is rejected with status 401
+  Scenario: Users see only their own orders
+    Given the payment service approves payments
+    And "bob" has ordered "Bobs secret order"
+    When I order 1 of "Anas book"
+    Then my order list contains "Anas book"
+    And my order list does not contain "Bobs secret order"

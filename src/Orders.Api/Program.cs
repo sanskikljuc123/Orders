@@ -2,6 +2,8 @@ using System.Security.Claims;
 using Autofac;
 using Autofac.Extensions.DependencyInjection;
 using FluentValidation;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -42,12 +44,54 @@ var authEnabled = !string.IsNullOrEmpty(authority);
 if (authEnabled)
 {
     builder.Services
-        .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddAuthentication(o =>
+        {
+            o.DefaultScheme = "Smart";
+            o.DefaultChallengeScheme = "Smart";
+        })
+        // Requests with an Authorization header use the JWT; browser requests use the cookie.
+        .AddPolicyScheme("Smart", null, o =>
+        {
+            o.ForwardDefaultSelector = ctx =>
+                ctx.Request.Headers.ContainsKey("Authorization")
+                    ? JwtBearerDefaults.AuthenticationScheme
+                    : CookieAuthenticationDefaults.AuthenticationScheme;
+        })
         .AddJwtBearer(o =>
         {
             o.Authority = authority;
             o.RequireHttpsMetadata = false; // dev Keycloak runs on plain http
             o.TokenValidationParameters.ValidateAudience = false;
+        })
+        .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, o =>
+        {
+            o.Cookie.Name = "orders.auth";
+            // API-style behaviour: answer 401 instead of redirecting. Login starts only at /login.
+            o.Events.OnRedirectToLogin = ctx =>
+            {
+                ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return Task.CompletedTask;
+            };
+            o.Events.OnRedirectToAccessDenied = ctx =>
+            {
+                ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return Task.CompletedTask;
+            };
+        })
+        .AddOpenIdConnect("oidc", o =>
+        {
+            o.Authority = authority;
+            o.ClientId = "orders-web";
+            o.RequireHttpsMetadata = false;
+            o.ResponseType = "code";
+            o.UsePkce = true;
+            // Dev runs on plain http: use query response mode and Lax cookies (form_post needs SameSite=None+Secure).
+            o.ResponseMode = "query";
+            o.CorrelationCookie.SameSite = SameSiteMode.Lax;
+            o.NonceCookie.SameSite = SameSiteMode.Lax;
+            o.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+            o.Scope.Add("profile");
+            o.TokenValidationParameters.NameClaimType = "preferred_username";
         });
     builder.Services.AddAuthorization();
 }
@@ -68,7 +112,18 @@ if (authEnabled)
 {
     app.UseAuthentication();
     app.UseAuthorization();
+
+    app.MapGet("/login", () =>
+        Results.Challenge(new AuthenticationProperties { RedirectUri = "/" }, new[] { "oidc" }));
+
+    app.MapGet("/logout", () =>
+        Results.SignOut(new AuthenticationProperties { RedirectUri = "/" },
+            new[] { CookieAuthenticationDefaults.AuthenticationScheme }));
 }
+
+var me = app.MapGet("/me", (ClaimsPrincipal user) => Results.Ok(new { name = UserIds.Name(user) }));
+if (authEnabled)
+    me.RequireAuthorization();
 
 var orders = app.MapGroup("/orders");
 if (authEnabled)
@@ -133,6 +188,11 @@ public static class UserIds
     public static string Get(ClaimsPrincipal user) =>
         user.FindFirst("sub")?.Value
         ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value
+        ?? "anonymous";
+
+    public static string Name(ClaimsPrincipal user) =>
+        user.Identity?.Name
+        ?? user.FindFirst("preferred_username")?.Value
         ?? "anonymous";
 }
 

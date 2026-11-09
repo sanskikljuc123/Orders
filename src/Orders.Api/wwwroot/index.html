@@ -2,25 +2,65 @@
 <html lang="en">
 <head><meta charset="utf-8"><title>Orders</title></head>
 <body>
-  <h1>New order</h1>
-  <label>Product <input data-testid="product" id="product"></label>
-  <label>Quantity <input data-testid="quantity" id="quantity" type="number" value="1"></label>
-  <button data-testid="submit" id="submit">Place order</button>
-  <p data-testid="result" id="result"></p>
+  <h1>Orders</h1>
+
+  <section id="anonymous" hidden>
+    <p>You are not signed in.</p>
+    <a data-testid="login" href="/login">Log in</a>
+  </section>
+
+  <section id="app" hidden>
+    <p>Signed in as <strong data-testid="user" id="user"></strong> <a href="/logout">Log out</a></p>
+
+    <h2>New order</h2>
+    <label>Product <input data-testid="product" id="product"></label>
+    <label>Quantity <input data-testid="quantity" id="quantity" type="number" value="1"></label>
+    <button data-testid="submit" id="submit">Place order</button>
+    <p data-testid="result" id="result"></p>
+
+    <h2>My orders</h2>
+    <ul data-testid="orders-list" id="orders-list"></ul>
+  </section>
+
   <script>
-    document.getElementById('submit').onclick = async () => {
+    const $ = id => document.getElementById(id);
+
+    async function loadOrders() {
+      const res = await fetch('/orders');
+      if (!res.ok) return;
+      const list = $('orders-list');
+      list.replaceChildren();
+      for (const o of await res.json()) {
+        const li = document.createElement('li');
+        li.textContent = o.productName + ' (' + o.status + ')';
+        list.appendChild(li);
+      }
+    }
+
+    async function init() {
+      const me = await fetch('/me');
+      if (!me.ok) { $('anonymous').hidden = false; return; }
+      $('user').textContent = (await me.json()).name;
+      $('app').hidden = false;
+      await loadOrders();
+    }
+
+    $('submit').onclick = async () => {
       const res = await fetch('/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          productName: document.getElementById('product').value,
-          quantity: Number(document.getElementById('quantity').value)
+          productName: $('product').value,
+          quantity: Number($('quantity').value)
         })
       });
-      const out = document.getElementById('result');
-      if (res.ok) { const o = await res.json(); out.textContent = 'Order ' + o.status; }
+      const out = $('result');
+      if (res.ok) { out.textContent = 'Order ' + (await res.json()).status; await loadOrders(); }
+      else if (res.status === 401) { out.textContent = 'Please log in'; }
       else { out.textContent = 'Validation error'; }
     };
+
+    init();
   </script>
 </body>
 </html>

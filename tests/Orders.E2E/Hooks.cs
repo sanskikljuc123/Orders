@@ -3,8 +3,22 @@ using Reqnroll;
 
 public class ScenarioBrowser
 {
-    public IBrowserContext Context { get; set; } = default!;
-    public IPage Page { get; set; } = default!;
+    public IBrowserContext Context { get; private set; } = default!;
+    public IPage Page { get; private set; } = default!;
+
+    // Opens a fresh browser context; pass a saved session to start already signed in.
+    public async Task OpenAsync(string? storageState = null)
+    {
+        if (Context is not null) await Context.CloseAsync();
+
+        Context = await TestEnvironment.Browser.NewContextAsync(new BrowserNewContextOptions
+        {
+            BaseURL = TestEnvironment.ApiUrl,
+            StorageState = storageState
+        });
+        await Context.Tracing.StartAsync(new TracingStartOptions { Screenshots = true, Snapshots = true });
+        Page = await Context.NewPageAsync();
+    }
 }
 
 [Binding]
@@ -24,23 +38,7 @@ public class ScenarioHooks(ScenarioBrowser sb, ScenarioContext scenario)
         Path.Combine(AppContext.BaseDirectory, "playwright-artifacts");
 
     [BeforeScenario]
-    public async Task OpenBrowser()
-    {
-         var token = await TestEnvironment.GetAccessTokenAsync();
-        sb.Context = await TestEnvironment.Browser.NewContextAsync(new BrowserNewContextOptions
-        {
-            BaseURL = TestEnvironment.ApiUrl,
-            ExtraHTTPHeaders = new Dictionary<string, string> { ["Authorization"] = $"Bearer {token}" }
-        });
-
-        await sb.Context.Tracing.StartAsync(new TracingStartOptions
-        {
-            Screenshots = true,
-            Snapshots = true
-        });
-
-        sb.Page = await sb.Context.NewPageAsync();
-    }
+    public Task OpenBrowser() => sb.OpenAsync();
 
     [AfterScenario]
     public async Task CloseBrowser()

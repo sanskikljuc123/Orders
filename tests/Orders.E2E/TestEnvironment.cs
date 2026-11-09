@@ -63,6 +63,31 @@ public static class TestEnvironment
           return doc.RootElement.GetProperty("access_token").GetString()!;
     }
 
+    private static readonly Dictionary<string, string> StorageStates = new();
+
+    public static string PasswordFor(string user) => user switch
+    {
+        "ana" => "ana123",
+        "bob" => "bob123",
+        _ => throw new ArgumentException($"Unknown test user '{user}'")
+    };
+
+    // Logs in through the real Keycloak page once per user and reuses the saved session.
+    public static async Task<string> GetStorageStateAsync(string user)
+    {
+        if (StorageStates.TryGetValue(user, out var cached)) return cached;
+
+        var context = await Browser.NewContextAsync(new BrowserNewContextOptions { BaseURL = ApiUrl });
+        var page = await context.NewPageAsync();
+        var app = new OrderPage(page);
+        await app.OpenAsync();
+        await app.SignInAsync(user, PasswordFor(user));
+        await Assertions.Expect(app.SignedInUser).ToContainTextAsync(user, new() { Timeout = 30000 });
+        var state = await context.StorageStateAsync();
+        await context.CloseAsync();
+        return StorageStates[user] = state;
+    }
+
     public static async Task SetPaymentModeAsync(string mode)
     {
         var res = await _payment.PostAsJsonAsync("/__admin/mode", new { mode });
