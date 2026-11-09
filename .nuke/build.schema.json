@@ -26,7 +26,13 @@
       "enum": [
         "Compile",
         "ComputeVersion",
-        "Restore"
+        "CoverageGate",
+        "E2ETests",
+        "InstallBrowser",
+        "IntegrationTests",
+        "Restore",
+        "Test",
+        "UnitTests"
       ]
     },
     "Verbosity": {
@@ -103,6 +109,16 @@
         "Configuration": {
           "type": "string",
           "description": "Build configuration"
+        },
+        "IntegrationBranchFloor": {
+          "type": "number",
+          "description": "Minimum branch coverage % from integration tests",
+          "format": "double"
+        },
+        "UnitBranchFloor": {
+          "type": "number",
+          "description": "Minimum branch coverage % from unit tests",
+          "format": "double"
         }
       }
     },

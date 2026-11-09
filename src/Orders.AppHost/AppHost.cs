@@ -21,7 +21,8 @@ if (!builder.ExecutionContext.IsPublishMode)
 var postgres = builder.AddPostgres("postgres");
 var ordersDb = postgres.AddDatabase("ordersdb");
 
-var payment = builder.AddProject<Projects.FakePaymentService>("payment");
+var payment = builder.AddProject<Projects.FakePaymentService>("payment")
+    .WithHttpHealthCheck("/", endpointName: "http");
 
 builder.AddProject<Projects.Orders_Api>("api")
     .WithReference(ordersDb)
@@ -31,6 +32,7 @@ builder.AddProject<Projects.Orders_Api>("api")
     .WaitFor(ordersDb)
     .WaitFor(payment)
     .WaitFor(keycloak)
+    .WithHttpHealthCheck("/health", endpointName: "http")
     .WithExternalHttpEndpoints();
 
 builder.Build().Run();

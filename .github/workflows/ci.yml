@@ -6,16 +6,33 @@ on:
   pull_request:
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0   # GitVersion needs the full history
 
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
 
-      - name: Build
-        run: dotnet build --configuration Debug
+      # NUKE is the single entry point: Compile, unit + integration tests with coverage gate,
+      # Playwright browser install (matching Microsoft.Playwright), E2E.
+      - name: Build and test
+        run: ./build.sh --target Test
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults
+
+      - name: Upload Playwright artifacts (trace, screenshot, video)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: tests/Orders.E2E/bin/Debug/net10.0/playwright-artifacts
+          if-no-files-found: ignore

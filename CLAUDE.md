@@ -64,11 +64,11 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
   realm: no test users, exact redirect URIs, HTTPS required, brute-force protection on.
 
 **Not done yet** (target state above, current state here):
-- CI (`.github/workflows/ci.yml`) calls `dotnet build` directly, not `./build.sh`; `build.sh`
-  is not executable in git. Fix in phase 6.
-- NUKE has only `ComputeVersion`, `Restore`, `Compile`. `Test`, `Publish`, `Helm` are missing.
+- NUKE has `Compile`, `UnitTests`, `IntegrationTests`, `CoverageGate`, `InstallBrowser`,
+  `E2ETests`, `Test` (default). `Publish` and `Helm` are missing (phase 7).
 - No `deploy/values.<env>.yaml` and no README with the phase-1 smoke check yet.
-- Tests were removed to re-run phases 3-5 with the `test-setup` skill; those gates are open.
+- E2E locally where the Playwright download is blocked: `E2E_CHROMIUM_PATH=<installed chrome>`
+  and `E2E_VIDEO=0` are a local-only workaround; CI must install the matching browser.
 
 ## Phases (each ends with a GATE; do not skip)
 0. Foundation: solution, global.json, props, GitVersion, .gitignore, NUKE skeleton.
@@ -84,6 +84,10 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
 7. Helm via `aspire publish`. GATE: `helm lint` + `helm template` OK.
 
 ## Commands (fill in as they are verified)
-- Build: `dotnet build`
+- Build: `dotnet build` | Full pipeline (same as CI): `./build.sh` (`--target UnitTests` etc.)
+- Coverage floors (branch, Orders.Api): unit 25%, integration 70%; raise with real tests
+  (`--unit-branch-floor`, `--integration-branch-floor`).
 - Tests: `dotnet test`
 - Playwright browsers: `pwsh tests/Orders.E2E/bin/Debug/net10.0/playwright.ps1 install`
+- Unit: `dotnet test tests/Orders.UnitTests` | Integration (Docker): `dotnet test tests/Orders.IntegrationTests`
+  | E2E (Docker + browser): `dotnet test tests/Orders.E2E` (`--filter Category=smoke` for smoke only)

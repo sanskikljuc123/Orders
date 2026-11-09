@@ -1,4 +1,7 @@
+using System;
+using System.Globalization;
 using System.Linq;
+using System.Xml.Linq;
 using Nuke.Common;
 using Nuke.Common.IO;
 using Nuke.Common.Tooling;
@@ -7,14 +10,23 @@ using static Nuke.Common.Tools.DotNet.DotNetTasks;
 
 class Build : NukeBuild
 {
-    public static int Main() => Execute<Build>(x => x.Compile);
+    public static int Main() => Execute<Build>(x => x.Test);
 
     [Parameter("Build configuration")]
     readonly string Configuration = "Debug";
 
+    // Coverage floors (branch coverage of Orders.Api, from coverlet). Set at the measured level so
+    // coverage can't silently drop; raise them when real tests are added, never write tests to hit them.
+    [Parameter("Minimum branch coverage % from unit tests")]
+    readonly double UnitBranchFloor = 25;
+
+    [Parameter("Minimum branch coverage % from integration tests")]
+    readonly double IntegrationBranchFloor = 70;
+
     string Version = "0.0.0-local";
 
     AbsolutePath Solution => RootDirectory / "Orders.slnx";
+    AbsolutePath ResultsDir => RootDirectory / "TestResults";
 
     Target ComputeVersion => _ => _
         .Executes(() =>
@@ -43,4 +55,65 @@ class Build : NukeBuild
                 .SetVersion(Version)
                 .EnableNoRestore());
         });
+
+    Target UnitTests => _ => _
+        .DependsOn(Compile)
+        .Executes(() => RunTests("Orders.UnitTests", coverage: true));
+
+    Target IntegrationTests => _ => _
+        .DependsOn(Compile)
+        .Executes(() => RunTests("Orders.IntegrationTests", coverage: true));
+
+    Target InstallBrowser => _ => _
+        .DependsOn(Compile)
+        .Executes(() =>
+        {
+            // Browser and ffmpeg (needed for video) matching the Microsoft.Playwright package.
+            var script = RootDirectory / "tests" / "Orders.E2E" / "bin" / Configuration / "net10.0" / "playwright.ps1";
+            var pwsh = ToolResolver.GetPathTool("pwsh");
+            // Don't interpolate a string that contains spaces: NUKE quotes it as one argument
+            // (" --with-deps" became `install" --with-deps"` and Playwright rejected it).
+            if (IsServerBuild)
+                pwsh($"{script} install --with-deps chromium ffmpeg");
+            else
+                pwsh($"{script} install chromium ffmpeg");
+        });
+
+    Target E2ETests => _ => _
+        .DependsOn(Compile, InstallBrowser)
+        .Executes(() => RunTests("Orders.E2E", coverage: false));
+
+    Target CoverageGate => _ => _
+        .After(UnitTests, IntegrationTests)
+        .Executes(() =>
+        {
+            CheckBranchCoverage("Orders.UnitTests", UnitBranchFloor);
+            CheckBranchCoverage("Orders.IntegrationTests", IntegrationBranchFloor);
+        });
+
+    Target Test => _ => _
+        .DependsOn(UnitTests, IntegrationTests, CoverageGate, E2ETests);
+
+    void RunTests(string project, bool coverage)
+    {
+        var results = ResultsDir / project;
+        results.CreateOrCleanDirectory();
+        DotNetTest(s => s
+            .SetProjectFile(RootDirectory / "tests" / project)
+            .SetConfiguration(Configuration)
+            .EnableNoBuild()
+            .SetLoggers("trx")
+            .SetResultsDirectory(results)
+            .When(_ => coverage, x => x.SetDataCollector("XPlat Code Coverage")));
+    }
+
+    void CheckBranchCoverage(string project, double floor)
+    {
+        var report = (ResultsDir / project).GlobFiles("**/coverage.cobertura.xml").FirstOrDefault()   // coverlet also copies it next to the .trx
+            ?? throw new Exception($"No coverage report for {project}. Run its test target first.");
+        var rate = double.Parse(XDocument.Load(report).Root!.Attribute("branch-rate")!.Value,
+            CultureInfo.InvariantCulture) * 100;
+        Serilog.Log.Information("{Project}: branch coverage {Rate:F1}% (floor {Floor}%)", project, rate, floor);
+        Assert.True(rate >= floor, $"{project}: branch coverage {rate:F1}% is below the floor of {floor}%");
+    }
 }
