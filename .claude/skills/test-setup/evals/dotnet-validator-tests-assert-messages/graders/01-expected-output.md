@@ -1,7 +1,0 @@
----
-type: llm
-focus: trace
-weight: 1
----
-
-The result matches this description: Unit tests in tests/Orders.UnitTests use xUnit like the existing ones, assert the failing property name and error message for each invalid case, cover boundaries (0, 1, 100, 101, empty, whitespace, 50 vs 51 chars, unicode), and the run output (or a clear statement that dotnet is unavailable with the exact command) is reported.
