@@ -1,0 +1,50 @@
+# API and contract testing (any stack)
+
+## Per-endpoint coverage
+
+For each endpoint that matters, cover what a caller depends on:
+
+| Area | What to assert |
+|---|---|
+| Status codes | Success (200/201/204) and each documented error (400, 401, 403, 404, 409, 422) |
+| Body shape | Specific field values, types, required fields present; validate against the OpenAPI/JSON schema if one exists |
+| Auth | No token → 401; invalid/expired token → 401; valid token, wrong user/role → 403 (or 404 if the API hides existence) |
+| Authorization / tenancy | User A cannot read, list, update or delete user B's resource |
+| Validation | Each rule rejects with the specific field and message; boundaries (min-1, min, max, max+1), empty, null, unicode, oversized |
+| Pagination | First/last page, page size limits, stable ordering, `next` link/cursor, empty result |
+| Idempotency | Repeating a PUT/DELETE, or a POST with the same idempotency key, has no extra side effect (e.g. one charge, one record) |
+| Side effects | The DB row / message / email actually exists, read back through a separate path |
+| Failure of dependencies | Downstream 500/timeout → the API's documented behaviour, not a 500 with a stack trace |
+| Headers | `Location` on 201, content type, caching/CORS where relevant |
+
+Assert values, not just the status: `201` *and* `body.status == "Paid"` *and* the `Location`
+header points to a fetchable resource.
+
+## Consumer-driven contract tests (Pact)
+
+Use when one service calls another you deploy independently, so a provider change can't silently
+break a consumer.
+
+1. **Consumer side** writes an interaction: "given order 42 exists, GET /orders/42 returns
+   `{ id: 42, status: like("Paid") }`" using matchers (`like`, `eachLike`, regex), not exact
+   incidental values. The test runs the consumer's client against the Pact mock server and
+   produces a pact file.
+2. Publish the pact (Pact Broker / PactFlow) tagged with the consumer version/branch.
+3. **Provider side** verifies all consumer pacts against the real provider with provider states
+   set up via a state-change endpoint/hook. Run it in the provider's CI.
+4. Gate deploys with `can-i-deploy`.
+
+Libraries: PactNet (.NET), `@pact-foundation/pact` (JS), `pact-python`, pact-jvm. Check the
+current major version's API — they changed significantly between majors.
+
+Contract tests check *shape and semantics the consumer uses*, not provider business logic;
+keep those in the provider's own tests.
+
+## Fakes for third-party APIs
+
+- Build them from the provider's OpenAPI spec or recorded real responses (HAR, VCR cassettes,
+  WireMock recordings). Without either, keep the fake minimal and document it as an
+  `UNVERIFIED ASSUMPTION`.
+- In-process tests: HTTP-level mocks (WireMock.Net, MSW, respx/responses) or DI fakes.
+- Out-of-process tests (E2E, compose, Aspire): a fake service process with a test-only control
+  endpoint (e.g. `POST /__admin/mode`), reset after each test.
