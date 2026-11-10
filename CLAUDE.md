@@ -70,7 +70,9 @@ GitVersion | NUKE | Stryker.NET | Helm + Kubernetes (via `aspire publish` + `hel
 - Version comes from GitVersion into NUKE.
 - Deploy: `aspire publish -o <dir>` then `helm upgrade --install ... -f deploy/values.<env>.yaml`.
   Do NOT rely on `aspire deploy` for Kubernetes until it is proven stable here.
-- Logging: Serilog structured logs; never log secrets/tokens.
+- Logging: Serilog structured logs; never log secrets/tokens. Checked by `LogSecretsTests`
+  (captures every event via a DI sink, `ReadFrom.Services`, and fails on any JWT, test password or
+  `Idempotency-Key` value).
 - Keycloak: the test realm (`src/Orders.AppHost/Realms`, users ana/bob with known passwords) is
   imported only for local runs and tests, never in `aspire publish`. A deployment needs its own
   realm: no test users, exact redirect URIs, HTTPS required, brute-force protection on.

@@ -12,7 +12,9 @@ using ZiggyCreatures.Caching.Fusion;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Host.UseSerilog((ctx, lc) => lc.WriteTo.Console());
+// ReadFrom.Services adds sinks registered in DI (tests capture every event to check that no
+// secret is ever logged, see LogSecretsTests).
+builder.Host.UseSerilog((ctx, services, lc) => lc.ReadFrom.Services(services).WriteTo.Console());
 builder.Host.UseServiceProviderFactory(new AutofacServiceProviderFactory());
 builder.Host.ConfigureContainer<ContainerBuilder>(c =>
 {

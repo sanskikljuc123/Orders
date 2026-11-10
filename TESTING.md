@@ -41,6 +41,7 @@ browser), **N** nightly only (`.github/workflows/ci-nightly.yml`).
 | Logout leaves the user signed in (app or Keycloak) | E "Customer who logs out is asked to log in again", "… can no longer place an order", "… must enter their password again" |
 | A copied cookie still works after logout | U `SessionStoreTests`; I `Login_cookie_sessions_live_on_the_server_so_logout_can_revoke_them`; E "A copy of the session cookie stops working after logout" |
 | A token issued to another application of the realm is accepted | I `Token_issued_to_another_client_of_the_realm_returns_401` (real `admin-cli` token), `AuthSecurityOptionsTests` (audience required); U `ProductionRealmTests.Web_client_tokens_carry_the_api_audience` |
+| Tokens, passwords or idempotency keys end up in logs | I `LogSecretsTests` (every log event of the sensitive flows, incl. refused tokens; fails on any JWT) |
 | A dependency with a known vulnerability ships | every restore: NuGet audit fails on High/Critical, direct or transitive (`Directory.Build.props`); Dependabot update PRs |
 | Insecure code (weak crypto, disabled validation, injectable SQL) | every build: .NET security analyzers, findings are errors |
 | A container image with a known fixable vulnerability is pushed | `Images` target: Trivy scan before any push (HIGH/CRITICAL with a fix fail) |
