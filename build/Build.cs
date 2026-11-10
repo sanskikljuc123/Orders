@@ -240,6 +240,9 @@ class Build : NukeBuild
             // Stryker.NET breaks the critical code on purpose and checks the tests notice. The
             // "break" threshold in each stryker/*.json fails the build when too many survive.
             // Run nightly (ci-nightly.yml); a few minutes, so not on every pull request.
+            // Stryker has its own tool manifest (stryker/.config): restoring it together with
+            // aspire.cli from the root manifest fails ("package contains aspire").
+            DotNet("tool restore", RootDirectory / "stryker");
             foreach (var config in new[] { "api", "shared" })
                 DotNet($"stryker --config-file {config}.json --output {ResultsDir / "mutation" / config}", RootDirectory / "stryker");
         });

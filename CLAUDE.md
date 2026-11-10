@@ -140,7 +140,7 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
   (`CriticalClasses` in `build/Build.cs`) >= 80% lines and branches. Summary in
   `TestResults/coverage-summary.md` and the GitHub job summary. Raise floors with real tests
   (`--total-branch-floor`, `--critical-branch-floor`); never write tests just to hit them.
-- Mutation (Stryker.NET 5, local tool): `./build.sh --target Mutation` runs `stryker/api.json`
+- Mutation (Stryker.NET 5, own tool manifest `stryker/.config` because restoring it with aspire.cli fails): `./build.sh --target Mutation` runs `stryker/api.json`
   (OrderService, SessionStore, CreateOrderValidator; break below 85%) and `stryker/shared.json`
   (payment client; break below 90%). Reports in `TestResults/mutation/*/reports/`. Stryker rejects
   thresholds unless break <= low <= high. Known survivors (SessionStore expiry boundary and cache
