@@ -9,7 +9,7 @@ using ZiggyCreatures.Caching.Fusion;
 /// Limitation: FusionCache is in-memory here, so sessions do not survive an API restart and are
 /// not shared between replicas. A distributed L2 cache (with a ticket serializer) fixes both.
 /// </summary>
-public sealed class SessionStore(IFusionCache cache) : ITicketStore
+public sealed class SessionStore(IFusionCache cache, TimeProvider clock) : ITicketStore
 {
     private static readonly TimeSpan DefaultLifetime = TimeSpan.FromDays(14);   // cookie default ExpireTimeSpan
 
@@ -22,17 +22,20 @@ public sealed class SessionStore(IFusionCache cache) : ITicketStore
         return key;
     }
 
-    public async Task RenewAsync(string key, AuthenticationTicket ticket) =>
-        await cache.SetAsync(CacheKey(key), ticket, new FusionCacheEntryOptions(Lifetime(ticket)));
+    public async Task RenewAsync(string key, AuthenticationTicket ticket)
+    {
+        var left = ticket.Properties.ExpiresUtc - clock.GetUtcNow();
+        if (left <= TimeSpan.Zero)
+        {
+            await RemoveAsync(key);   // already expired: never keep it
+            return;
+        }
+        await cache.SetAsync(CacheKey(key), ticket, new FusionCacheEntryOptions(left ?? DefaultLifetime));
+    }
 
     public async Task<AuthenticationTicket?> RetrieveAsync(string key) =>
         await cache.GetOrDefaultAsync<AuthenticationTicket>(CacheKey(key));
 
     public async Task RemoveAsync(string key) => await cache.RemoveAsync(CacheKey(key));
 
-    private static TimeSpan Lifetime(AuthenticationTicket ticket)
-    {
-        var left = ticket.Properties.ExpiresUtc - DateTimeOffset.UtcNow;
-        return left is { } l && l > TimeSpan.Zero ? l : DefaultLifetime;
-    }
 }

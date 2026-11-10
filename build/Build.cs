@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Xml.Linq;
@@ -15,13 +16,21 @@ class Build : NukeBuild
     [Parameter("Build configuration")]
     readonly string Configuration = "Debug";
 
-    // Coverage floors (branch coverage of Orders.Api, from coverlet). Set at the measured level so
-    // coverage can't silently drop; raise them when real tests are added, never write tests to hit them.
-    [Parameter("Minimum branch coverage % from unit tests")]
-    readonly double UnitBranchFloor = 25;
+    // Coverage floors on the MERGED unit + contract + integration report (generated migrations
+    // excluded, see coverlet.runsettings). Set just below the measured level so coverage can't
+    // silently drop; raise them with real tests, never write tests just to hit them.
+    [Parameter("Minimum merged branch coverage % for all production code")]
+    readonly double TotalBranchFloor = 90;
 
-    [Parameter("Minimum branch coverage % from integration tests")]
-    readonly double IntegrationBranchFloor = 70;
+    [Parameter("Minimum merged branch coverage % for each critical class")]
+    readonly double CriticalBranchFloor = 80;
+
+    // Code where a regression costs money, data or security. Each must stay above CriticalBranchFloor.
+    static readonly string[] CriticalClasses =
+    {
+        "OrderService", "IdempotencyLocks", "CreateOrderValidator", "HttpPaymentClient",
+        "SessionStore", "EfOrderRepository", "UserIds",
+    };
 
     string Version = "0.0.0-local";
 
@@ -105,11 +114,31 @@ class Build : NukeBuild
         .Executes(() => RunTests("Orders.E2E", coverage: false));
 
     Target CoverageGate => _ => _
-        .After(UnitTests, IntegrationTests)
+        .After(UnitTests, ContractTests, IntegrationTests)
         .Executes(() =>
         {
-            CheckBranchCoverage("Orders.UnitTests", UnitBranchFloor);
-            CheckBranchCoverage("Orders.IntegrationTests", IntegrationBranchFloor);
+            var coverage = MergedCoverage("Orders.UnitTests", "Orders.ContractTests", "Orders.IntegrationTests");
+            var failures = new List<string>();
+            var summary = new System.Text.StringBuilder("## Coverage (merged unit + contract + integration)\n\n| Code | Lines | Branches | Floor (lines and branches) |\n|---|---|---|---|\n");
+
+            void Check(string name, CoverageCount c, double floor)
+            {
+                summary.Append($"| {name} | {c.LinePercent:F1}% | {c.BranchPercent:F1}% ({c.BranchesCovered}/{c.BranchesTotal}) | {floor}% |\n");
+                Serilog.Log.Information("{Name}: lines {Lines:F1}%, branches {Branches:F1}% (floor {Floor}%)", name, c.LinePercent, c.BranchPercent, floor);
+                if (c.BranchPercent < floor) failures.Add($"{name}: branch coverage {c.BranchPercent:F1}% is below the floor of {floor}%");
+                // Classes without branches (e.g. the validator) would pass any branch floor; lines count too.
+                if (c.LinePercent < floor) failures.Add($"{name}: line coverage {c.LinePercent:F1}% is below the floor of {floor}%");
+            }
+
+            Check("All production code", coverage.Total, TotalBranchFloor);
+            foreach (var cls in CriticalClasses)
+            {
+                Assert.True(coverage.ByClass.ContainsKey(cls), $"Critical class {cls} has no coverage data (renamed? update CriticalClasses)");
+                Check(cls, coverage.ByClass[cls], CriticalBranchFloor);
+            }
+
+            WriteSummary(summary.ToString());
+            Assert.True(failures.Count == 0, string.Join("; ", failures));
         });
 
     Target Publish => _ => _
@@ -183,16 +212,68 @@ class Build : NukeBuild
             .EnableNoBuild()
             .SetLoggers("trx")
             .SetResultsDirectory(results)
-            .When(_ => coverage, x => x.SetDataCollector("XPlat Code Coverage")));
+            .When(_ => coverage, x => x
+                .SetDataCollector("XPlat Code Coverage")
+                .SetSettingsFile(RootDirectory / "coverlet.runsettings")));
     }
 
-    void CheckBranchCoverage(string project, double floor)
+    record CoverageCount(int LinesCovered, int LinesTotal, int BranchesCovered, int BranchesTotal)
     {
-        var report = (ResultsDir / project).GlobFiles("**/coverage.cobertura.xml").FirstOrDefault()   // coverlet also copies it next to the .trx
-            ?? throw new Exception($"No coverage report for {project}. Run its test target first.");
-        var rate = double.Parse(XDocument.Load(report).Root!.Attribute("branch-rate")!.Value,
-            CultureInfo.InvariantCulture) * 100;
-        Serilog.Log.Information("{Project}: branch coverage {Rate:F1}% (floor {Floor}%)", project, rate, floor);
-        Assert.True(rate >= floor, $"{project}: branch coverage {rate:F1}% is below the floor of {floor}%");
+        public double LinePercent => LinesTotal == 0 ? 100 : 100.0 * LinesCovered / LinesTotal;
+        public double BranchPercent => BranchesTotal == 0 ? 100 : 100.0 * BranchesCovered / BranchesTotal;
+    }
+
+    record MergedReport(CoverageCount Total, Dictionary<string, CoverageCount> ByClass);
+
+    /// <summary>
+    /// Merges coverlet reports line by line: a line or branch counts as covered if any test layer
+    /// covers it. Classes are grouped by their top-level name (lambdas/nested classes included).
+    /// </summary>
+    MergedReport MergedCoverage(params string[] projects)
+    {
+        var lines = new Dictionary<(string File, int Line), (string Class, bool Hit, int BranchesCovered, int BranchesTotal)>();
+        foreach (var project in projects)
+        {
+            var report = (ResultsDir / project).GlobFiles("**/coverage.cobertura.xml").FirstOrDefault()   // coverlet also copies it next to the .trx
+                ?? throw new Exception($"No coverage report for {project}. Run its test target first.");
+            foreach (var cls in XDocument.Load(report).Descendants("class"))
+            {
+                var name = cls.Attribute("name")!.Value.Split('/')[0];
+                var file = cls.Attribute("filename")!.Value;
+                foreach (var line in cls.Element("lines")!.Elements("line"))
+                {
+                    var key = (file, int.Parse(line.Attribute("number")!.Value, CultureInfo.InvariantCulture));
+                    var hit = int.Parse(line.Attribute("hits")!.Value, CultureInfo.InvariantCulture) > 0;
+                    var (covered, total) = (0, 0);
+                    var condition = line.Attribute("condition-coverage")?.Value;   // e.g. "50% (1/2)"
+                    if (condition is not null)
+                    {
+                        var m = System.Text.RegularExpressions.Regex.Match(condition, @"\((\d+)/(\d+)\)");
+                        (covered, total) = (int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture), int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture));
+                    }
+                    lines[key] = lines.TryGetValue(key, out var seen)
+                        ? (seen.Class, seen.Hit || hit, Math.Max(seen.BranchesCovered, covered), Math.Max(seen.BranchesTotal, total))
+                        : (name, hit, covered, total);
+                }
+            }
+        }
+
+        static CoverageCount Count(IEnumerable<(string Class, bool Hit, int BranchesCovered, int BranchesTotal)> ls)
+        {
+            var list = ls.ToList();
+            return new(list.Count(l => l.Hit), list.Count, list.Sum(l => l.BranchesCovered), list.Sum(l => l.BranchesTotal));
+        }
+
+        return new(Count(lines.Values),
+            lines.Values.GroupBy(l => l.Class).ToDictionary(g => g.Key, g => Count(g)));
+    }
+
+    /// <summary>Saves a Markdown summary and, on GitHub Actions, adds it to the job summary page.</summary>
+    void WriteSummary(string markdown)
+    {
+        (ResultsDir / "coverage-summary.md").WriteAllText(markdown);
+        var jobSummary = System.Environment.GetEnvironmentVariable("GITHUB_STEP_SUMMARY");
+        if (!string.IsNullOrEmpty(jobSummary))
+            System.IO.File.AppendAllText(jobSummary, markdown + "\n");
     }
 }

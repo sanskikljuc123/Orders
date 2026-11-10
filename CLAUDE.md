@@ -112,8 +112,11 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
 - Container images: `./build.sh --target Images` builds `orders-api` and `orders-payment` into
   local Docker (.NET SDK container support, no Dockerfile). CI on main adds `--push-images true`
   and pushes to `ghcr.io/sanskikljuc123/<image>:<SemVer>` with `GITHUB_TOKEN`.
-- Coverage floors (branch, Orders.Api): unit 25%, integration 70%; raise with real tests
-  (`--unit-branch-floor`, `--integration-branch-floor`).
+- Coverage: NUKE `CoverageGate` merges the unit + contract + integration reports (generated
+  migrations excluded via `coverlet.runsettings`) and requires all production code >= 90% branches
+  and each critical class (`CriticalClasses` in `build/Build.cs`) >= 80% lines and branches.
+  Summary: `TestResults/coverage-summary.md` (and the GitHub job summary). Raise floors with real
+  tests (`--total-branch-floor`, `--critical-branch-floor`); never write tests just to hit them.
 - Tests: `dotnet test`
 - Playwright browsers: `pwsh tests/Orders.E2E/bin/Debug/net10.0/playwright.ps1 install`
 - Unit: `dotnet test tests/Orders.UnitTests` | Integration (Docker): `dotnet test tests/Orders.IntegrationTests`
