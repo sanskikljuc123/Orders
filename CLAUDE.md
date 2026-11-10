@@ -91,6 +91,10 @@ skill) -> `coverage-review` on the diff before the PR -> CI or nightly red -> `f
   no `Claude-Session: ...` links, no "Generated with Claude Code" lines.
 - Ask before pushing. This rule wins over the cloud environment's stop hook that asks to push
   unpushed commits.
+- Enforced, not only written down: `.claude/settings.json` turns Claude Code's attribution off and
+  a PreToolUse hook (`.claude/hooks/block-ai-attribution.py`) refuses such commits; the NUKE target
+  `Conventions` (part of `Test`, so every CI run) fails on attribution in any commit after
+  `33a83da`. Three commits from 2026-11-09, before the rule, keep theirs (history not rewritten).
 
 ## Build / CI / deploy
 - NUKE (`build/`) is the single entry point; GitHub Actions only calls `./build.sh` / `./build.cmd`.
@@ -162,6 +166,9 @@ Run the app and the manual smoke check: [`README.md`](README.md).
 - E2E: `dotnet test tests/Orders.E2E` (Docker + Playwright browser:
   `pwsh tests/Orders.E2E/bin/Debug/net10.0/playwright.ps1 install`); `--filter Category=smoke` for smoke only
 - `dotnet test` alone runs all four, so it needs Docker and the browser too.
+- `./build.sh --target Conventions` (also part of `Test`): every test name in `TESTING.md` exists
+  (names with `_` or ending in `Tests`; a trailing `…`/`*` is a prefix; E2E scenario titles are not
+  checked), and no commit since `33a83da` carries AI attribution.
 - Everything CI runs on a pull request: `./build.sh --target Test Helm Images` (Linux), plus
   `.\build.cmd --target UnitTests ContractTests` on Windows (job `windows`).
 - API contract changed on purpose: `UPDATE_OPENAPI_SNAPSHOT=1 dotnet test tests/Orders.IntegrationTests

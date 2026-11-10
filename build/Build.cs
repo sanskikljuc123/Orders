@@ -402,7 +402,57 @@ class Build : NukeBuild
     }
 
     Target Test => _ => _
-        .DependsOn(UnitTests, ContractTests, IntegrationTests, CoverageGate, E2ETests);
+        .DependsOn(Conventions, UnitTests, ContractTests, IntegrationTests, CoverageGate, E2ETests);
+
+    // Commit messages after this commit must carry no AI attribution (CLAUDE.md, Git). Three
+    // commits from 2026-11-09, before that rule, still have it; rewriting main's history to remove
+    // it was not worth breaking every checkout.
+    const string NoAttributionSince = "33a83daf175caa2d53ceb27ffa0d6ab266041ec8";
+
+    static readonly string[] AttributionPatterns =
+        [@"Co-Authored-By:\s*Claude", @"Claude-Session:", @"Generated with \[?Claude Code", @"claude\.ai/code/session"];
+
+    Target Conventions => _ => _
+        .Executes(() =>
+        {
+            var problems = new List<string>();
+
+            // 1. TESTING.md names only tests that exist: a renamed or deleted test must update the
+            //    risk map (it listed tests that did not prove what the row claimed). Names ending in
+            //    "…" or "*" are prefixes.
+            var tests = string.Join("\n", (RootDirectory / "tests").GlobFiles("**/*.cs")
+                .Where(f => !f.ToString().Contains($"{System.IO.Path.DirectorySeparatorChar}obj{System.IO.Path.DirectorySeparatorChar}"))
+                .Select(f => f.ReadAllText()));
+            var names = System.Text.RegularExpressions.Regex.Matches((RootDirectory / "TESTING.md").ReadAllText(), @"`([A-Za-z][A-Za-z0-9_.…*]*)`")
+                .Select(m => m.Groups[1].Value)
+                .Where(n => System.Text.RegularExpressions.Regex.IsMatch(n, @"^[A-Z][A-Za-z0-9]*(_[A-Za-z0-9_]*|Tests)") || n.StartsWith("FAKED_"))
+                .Distinct().ToList();
+            foreach (var name in names)
+                foreach (var part in name.Split('.'))
+                {
+                    var prefix = part.TrimEnd('…', '*');
+                    var pattern = @"\b" + System.Text.RegularExpressions.Regex.Escape(prefix) + (prefix == part ? @"\b" : "");
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(tests, pattern))
+                    {
+                        problems.Add($"TESTING.md names `{name}`, but no test is called that");
+                        break;
+                    }
+                }
+
+            // 2. No AI attribution in commit messages since the rule (every author, not only Claude).
+            var git = ToolResolver.GetPathTool("git");
+            var log = string.Join("\n", git($"log --format=%h%x1f%B%x1e {NoAttributionSince}..HEAD", logOutput: false)
+                .Where(o => o.Type == OutputType.Std).Select(o => o.Text));
+            foreach (var commit in log.Split('\x1e', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var parts = commit.Trim().Split('\x1f', 2);
+                if (parts.Length == 2 && AttributionPatterns.Any(p => System.Text.RegularExpressions.Regex.IsMatch(parts[1], p, System.Text.RegularExpressions.RegexOptions.IgnoreCase)))
+                    problems.Add($"commit {parts[0]} has AI attribution in its message (CLAUDE.md, Git)");
+            }
+
+            Serilog.Log.Information("Conventions: {Names} test names in TESTING.md checked, commits since {Base} checked", names.Count, NoAttributionSince[..7]);
+            Assert.True(problems.Count == 0, "Conventions broken:\n" + string.Join("\n", problems));
+        });
 
     void RunTests(string project, bool coverage)
     {
