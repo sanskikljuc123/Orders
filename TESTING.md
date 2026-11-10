@@ -14,9 +14,9 @@ browser), **N** nightly only (`.github/workflows/ci-nightly.yml`).
 |---|---|
 | Wrong amount charged | U `OrderServiceTests.Charges_10_per_item`; I `OrdersApiTests.Order_charges_quantity_times_10` |
 | Declined or failed payment shown as paid | U `Declined_payment_gives_PaymentFailed_order`; I `Declined_payment_returns_order_with_PaymentFailed_status`, `Declined_order_is_stored_as_PaymentFailed`; E "Order is marked as failed when payment is declined", "Order is never shown as paid when the payment service fails" |
-| Double click or retry charges twice | U `Repeating_a_request_with_the_same_key_…`, `Concurrent_requests_with_the_same_key_charge_only_once`, `IdempotencyLocksTests`; I `IdempotencyTests` (same order, one row, one charge; unique index; `Concurrent_requests_with_the_same_key_through_the_API_charge_once`: overlapping requests through HTTP and the app's DI, so a lock that is not shared fails it); E "An impatient double click places the order only once" |
+| Double click or retry charges twice | U `Repeating_a_request_with_the_same_key_…`, `Concurrent_requests_with_the_same_key_charge_only_once`, `IdempotencyLocksTests`; I `IdempotencyTests` (same order, one row, one charge; unique index; `Concurrent_requests_with_the_same_key_through_the_API_charge_once`: overlapping requests through HTTP and the app's DI, so a lock that is not shared fails it); E "An impatient double click places the order only once"; I `PaidOrderDurabilityTests` (a retry of a Pending order or of one left by a crash uses the same payment reference; two API instances with one key store one order) |
 | A reused key silently returns an old order for a new request | U `Reusing_a_key_for_a_different_order_is_rejected_without_charging` (other product, quantity, case); I `Same_key_for_a_different_order_returns_422_and_is_not_charged_or_stored` |
-| Order lost (paid but not stored) | U `Declined_order_is_still_saved_for_the_user`; I `Placed_order_is_stored_with_owner_and_status`, `Created_order_can_be_fetched_from_its_Location` |
+| Order lost (paid but not stored) | U `Order_is_stored_as_Pending_before_it_is_charged`, `Approved_charge_whose_status_cannot_be_saved_leaves_the_order_Pending_not_lost`, `Declined_charge_whose_status_cannot_be_saved_also_stays_Pending…`, `Failing_to_store_the_pending_order_charges_nothing`, `Declined_order_is_still_saved_for_the_user`; I `PaidOrderDurabilityTests` (a trigger makes the real save fail after approval: 202, kept Pending, logged by id; before the charge: 503, nothing charged), `Placed_order_is_stored_with_owner_and_status` |
 | Invalid order charged or stored | U `CreateOrderValidatorTests` (all boundaries, messages, any culture); I `Invalid_order_returns_400_with_field_errors_and_is_not_charged`, `Invalid_order_is_not_stored`; E "Order without a product name is rejected" |
 | Validation text changes with the server language | U `Messages_are_the_same_whatever_the_server_culture` (and every validator case runs under de-DE) |
 
@@ -28,7 +28,7 @@ browser), **N** nightly only (`.github/workflows/ci-nightly.yml`).
 | Provider error, garbage answer, outage or slowness crashes ordering or hangs | U `HttpPaymentClientTests` (`Anything_but_a_clear_approval_means_not_paid`, `Unreachable_provider_…`, `Provider_that_does_not_answer_in_time_…`) |
 | A hanging provider holds order requests open (timeout not applied) | I `PaymentWiringTests` (the real client from Program.cs gives up after `Payment:TimeoutSeconds`) |
 | Unpaid orders with no trace for operators | U `Unpaid_outcome_is_logged_as_a_warning_with_its_reason` |
-| Fake differs from the real provider | **Not covered**: the contract is an UNVERIFIED ASSUMPTION (`src/FakePaymentService/README.md`) |
+| Fake differs from the real provider | **Not covered**: the contract is an UNVERIFIED ASSUMPTION (`src/FakePaymentService/README.md`); provider-side idempotency (one charge per reference) is **FAKED** for this example, modelled on Stripe's documentation: C `PaymentContractTests.FAKED_*`, U `FAKED_sends_the_order_reference_…` |
 
 ## Accounts and security
 
@@ -59,9 +59,9 @@ row filled in; an empty cell is a gap, "n/a" a decision.
 
 | Endpoint | No / bad token | Other user's data | Success contract | Invalid / broken input | Not found / empty |
 |---|---|---|---|---|---|
-| `POST /orders` | 401, not charged (`EndpointAuthTests`) | n/a (always the caller's) | 201, `Location`, exact fields without `userId` (`Order_response_has_exactly_the_fields_callers_read`), Paid / PaymentFailed, charge, idempotency (`IdempotencyTests`) | 400 per field (`Invalid_order_…`), cut-off / empty / wrong-type JSON 400 (`Unreadable_order_body_…`), text/plain 415, key reused for another order 422 — none charged | n/a |
+| `POST /orders` | 401, not charged (`EndpointAuthTests`) | n/a (always the caller's) | 201, `Location`, 202 + `Location` for a Pending order (`PaidOrderDurabilityTests`), exact fields without `userId` (`Order_response_has_exactly_the_fields_callers_read`), Paid / PaymentFailed, charge, idempotency (`IdempotencyTests`) | 400 per field (`Invalid_order_…`), cut-off / empty / wrong-type JSON 400 (`Unreadable_order_body_…`), text/plain 415, key reused for another order 422, order not placed (store down) 503 — none charged | n/a |
 | `GET /orders` | 401 | only own orders (U I E) | oldest first (`Users_list_shows_orders_oldest_first`) | n/a | new user gets `[]` (`NewUserTests`) |
-| `GET /orders/{id}` | 401 | 404 (`User_cannot_fetch_another_users_order`) | fetched from `Location` | not a Guid → 404 | unknown id → 404 |
+| `GET /orders/{id}` | 401 | 404 (`User_cannot_fetch_another_users_order`) | fetched from `Location`; a Pending order is not cached (`Pending_order_read_by_id_shows_its_final_status_once_completed`) | not a Guid → 404 | unknown id → 404 |
 | `GET /me` | 401 | n/a | name (`Me_returns_the_signed_in_users_name`) | n/a | n/a |
 | `GET /health` | public on purpose | n/a | `Healthy`: E2E startup, N `DeploySmoke` | n/a | n/a |
 | `GET /login`, `/logout` | public on purpose | n/a | E `Login.feature`, `Logout.feature` | n/a | n/a |
@@ -82,7 +82,12 @@ row filled in; an empty cell is a gap, "n/a" a decision.
 ## Known gaps
 
 - The real payment provider (see above).
-- Multiple API replicas: sessions and idempotency locks are in-memory; only the database index
-  protects against double orders across replicas, and no test runs two replicas.
+- Multiple API replicas: sessions are in-memory (a second replica would not know the session).
+  Orders no longer depend on one replica: the database reservation decides who charges, tested
+  with two API instances on one database (`PaidOrderDurabilityTests`).
+- Charges whose outcome is unknown (provider timeout, crash after the charge) are settled by a
+  retry with the same reference, which is safe only with provider-side idempotency: **FAKED** here,
+  UNVERIFIED for a real provider. An order nobody retries stays Pending (logged by id); there is no
+  automatic reconciliation job.
 - A real HTTPS deployment end to end (ingress, certificates, real domains) is not tested; the
   URLs in `deploy/` are placeholders.
