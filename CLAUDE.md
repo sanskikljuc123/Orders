@@ -89,8 +89,10 @@ GitVersion | NUKE | Stryker.NET | Helm + Kubernetes (via `aspire publish` + `hel
   tests); guarded by `AuthSecurityOptionsTests`. Logout ends the app cookie and the Keycloak
   session. Sessions are stored server-side (`SessionStore`), so logout revokes the cookie.
 - **Orders:** idempotent with an `Idempotency-Key` (the UI sends one per order attempt); a repeated
-  key returns the first order (`Idempotent-Replayed: true`) without charging again. Same-key
-  requests are serialized in-process; a unique (UserId, IdempotencyKey) index is the backstop.
+  key returns the first order (`Idempotent-Replayed: true`) without charging again; the same key
+  with a different product or quantity is rejected with 422 (IETF Idempotency-Key draft), nothing
+  charged. Same-key requests are serialized in-process; a unique (UserId, IdempotencyKey) index is
+  the backstop. Responses never contain `userId` (Keycloak's internal subject) or the key.
 - **Payment:** contract and client in `src/Orders.Shared/Payments.cs` (shared with the fake).
   Anything but a clear approval (HTTP error, unreadable body, unreachable, timeout after
   `Payment:TimeoutSeconds`, default 10) means not paid and is logged as a warning.
@@ -152,6 +154,8 @@ Run the app and the manual smoke check: [`README.md`](README.md).
 
 ## Cloud dev container (limitations)
 - Docker: after a container restart, delete a stale `/var/run/docker.pid` before starting dockerd.
+  If dockerd then fails with "timeout waiting for containerd to start", kill the leftover
+  `containerd` and remove `/var/run/docker/containerd/containerd.pid` first.
 - No nested Kubernetes: `DeploySmoke` runs only in CI (nightly).
 - Plain `dotnet run --project src/Orders.AppHost` aborts (exit 134); use `dotnet aspire run`.
 - Playwright download blocked: `E2E_CHROMIUM_PATH=<installed chrome>` and `E2E_VIDEO=0` (local-only;

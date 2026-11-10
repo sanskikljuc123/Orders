@@ -47,6 +47,23 @@ public class IdempotencyTests
     }
 
     [Fact]
+    public async Task Same_key_for_a_different_order_returns_422_and_is_not_charged_or_stored()
+    {
+        var ana = await _fixture.CreateClientAsAsync("ana");
+        var key = Guid.NewGuid().ToString();
+        var product = $"Book-{Guid.NewGuid():N}";
+        await ana.SendAsync(Post(new CreateOrderRequest(product, 1), key));
+
+        var reused = await ana.SendAsync(Post(new CreateOrderRequest(product, 5), key));
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, reused.StatusCode);
+        Assert.Contains("'Idempotency-Key' was already used for a different order.", await reused.Content.ReadAsStringAsync());
+        Assert.False(reused.Headers.Contains("Idempotent-Replayed"));
+        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._)).MustHaveHappenedOnceExactly();   // the first order only
+        Assert.Equal(1, await RowsWithProductAsync(product));
+    }
+
+    [Fact]
     public async Task Without_a_key_two_posts_are_two_orders()
     {
         var ana = await _fixture.CreateClientAsAsync("ana");

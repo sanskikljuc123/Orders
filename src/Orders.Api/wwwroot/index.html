@@ -61,6 +61,9 @@
       const out = $('result');
       if (res.ok) { orderAttemptKey = crypto.randomUUID(); out.textContent = 'Order ' + (await res.json()).status; await loadOrders(); }
       else if (res.status === 401) { out.textContent = 'Please log in'; }
+      // The key already placed an order (e.g. its answer was lost) and the form changed since:
+      // that order stands, so show it and start a new attempt.
+      else if (res.status === 422) { orderAttemptKey = crypto.randomUUID(); out.textContent = 'Your earlier order was already placed, see My orders'; await loadOrders(); }
       else { out.textContent = 'Validation error'; }
     };
 
