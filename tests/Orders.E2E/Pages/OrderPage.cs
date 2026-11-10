@@ -79,4 +79,40 @@ public class OrderPage(IPage page)
         var res = await page.APIRequest.PostAsync("/orders", new() { DataObject = new { productName = product, quantity } });
         return res.Status;
     }
+
+    /// <summary>
+    /// Answers this page's next order request in the browser with the given status; the server
+    /// never sees it. Later requests go through. For outcomes the real stack cannot produce on
+    /// demand (Pending, 503), which integration tests cover on the server side.
+    /// </summary>
+    public Task AnswerNextOrderAsync(int status)
+    {
+        var answered = false;
+        return page.RouteAsync("**/orders", async route =>
+        {
+            if (!answered && route.Request.Method == "POST")
+            {
+                answered = true;
+                await route.FulfillAsync(new() { Status = status, ContentType = "application/json", Body = "{}" });
+            }
+            else
+                await route.FallbackAsync();
+        });
+    }
+
+    /// <summary>Records the Idempotency-Key of every order request this page sends.</summary>
+    public void RecordOrderAttemptKeys(List<string> into) => page.Request += (_, request) =>
+    {
+        if (request.Method == "POST" && request.Url.EndsWith("/orders") && request.Headers.TryGetValue("idempotency-key", out var key))
+            into.Add(key);
+    };
+
+    /// <summary>Places the order in the form again, unchanged (no reload), and waits for the answer.</summary>
+    public async Task<int> PlaceSameOrderAgainAsync()
+    {
+        var response = await page.RunAndWaitForResponseAsync(
+            () => PlaceOrderButton.ClickAsync(),
+            r => r.Url.EndsWith("/orders") && r.Request.Method == "POST");
+        return response.Status;
+    }
 }

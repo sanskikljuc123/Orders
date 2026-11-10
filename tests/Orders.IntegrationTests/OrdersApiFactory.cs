@@ -23,7 +23,7 @@ public class OrdersApiFactory : WebApplicationFactory<Program>
     public void ResetPayment(bool approve = true)
     {
         Fake.Reset(Payment);   // clears configured behaviour and recorded calls
-        A.CallTo(() => Payment.ChargeAsync(A<decimal>._)).Returns(approve);
+        A.CallTo(() => Payment.ChargeAsync(A<decimal>._, A<Guid>._)).Returns(approve);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

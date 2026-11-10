@@ -120,12 +120,19 @@ skill) -> `coverage-review` on the diff before the PR -> CI or nightly red -> `f
   `orders-api` (audience mapper on `orders-web` in both realms); tokens for other clients of the
   realm are refused (CA5404 found this). Logout ends the app cookie and the Keycloak
   session. Sessions are stored server-side (`SessionStore`), so logout revokes the cookie.
-- **Orders:** idempotent with an `Idempotency-Key` (the UI sends one per order attempt); a repeated
-  key returns the first order (`Idempotent-Replayed: true`) without charging again; the same key
-  with a different product or quantity is rejected with 422 (IETF Idempotency-Key draft), nothing
-  charged. Same-key requests are serialized in-process; a unique (UserId, IdempotencyKey) index is
-  the backstop. Responses never contain `userId` (Keycloak's internal subject) or the key.
-- **Payment:** contract and client in `src/Orders.Shared/Payments.cs` (shared with the fake).
+- **Orders:** stored as `Pending` before the charge, then completed to `Paid`/`PaymentFailed` only
+  while still Pending (`OrderService`, `IOrderRepository.TryAddAsync`/`CompletePendingAsync`). The
+  unique (UserId, IdempotencyKey) index decides which request owns a key, also across instances;
+  the in-process lock is only a fast path. Failure before the charge: 503 "Order not placed,
+  nothing charged". Failure saving the result: 202 + the Pending order (logged by id, never the
+  key). A repeated key returns the first order (`Idempotent-Replayed: true`); a Pending one is
+  settled by charging its reference again; the same key with a different product or quantity is
+  422 (IETF Idempotency-Key draft). The UI keeps the key after 202/5xx so a retry is safe.
+  Pending orders are not cached. Responses never contain `userId` or the key.
+- **Payment:** contract and client in `src/Orders.Shared/Payments.cs` (shared with the fake). The
+  order id is sent as the provider's `Idempotency-Key` (one charge per reference): **FAKED** for this
+  example, modelled on Stripe's documentation, marked in the fake's README and above every test
+  that relies on it.
   Anything but a clear approval (HTTP error, unreadable body, unreachable, timeout after
   `Payment:TimeoutSeconds`, default 10) means not paid and is logged as a warning.
 - **Validation messages** are explicit English text, independent of the server culture.
@@ -230,8 +237,8 @@ Run the app and the manual smoke check: [`README.md`](README.md).
   redirect/logout URIs), `https://auth.example.com` (`Auth__Authority`, `keycloak_hostname` in
   `deploy/values.dev.yaml`). Only `values.dev.yaml` exists; image tags are passed with `--set`.
 - GHCR packages are private by default: make them public or give the cluster a pull secret.
-- One API replica only: sessions and idempotency locks are in-memory (a restart logs users out).
-  A distributed L2 cache would lift this.
+- One API replica only for sessions: they are in-memory (a restart logs users out); a distributed
+  L2 cache would lift this. Orders are safe across replicas (database reservation).
 - The chart installs and starts in a throwaway kind cluster (`DeploySmoke`, nightly, green since
   2026-11-10) but has never run in a real cluster with TLS ingress, real domains and certificates.
 - The payment provider contract is an UNVERIFIED ASSUMPTION (`src/FakePaymentService/README.md`).

@@ -4,7 +4,11 @@ using Microsoft.EntityFrameworkCore.Design;
 
 public interface IOrderRepository
 {
-    Task AddAsync(Order order);
+    /// <summary>Stores a new order. False (and nothing stored) if the same user already has an
+    /// order with the same idempotency key; the database decides, also across instances.</summary>
+    Task<bool> TryAddAsync(Order order);
+    /// <summary>Sets the final status only if the order is still Pending; false otherwise.</summary>
+    Task<bool> CompletePendingAsync(Guid id, string status);
     Task<Order?> FindAsync(Guid id, string userId);
     Task<List<Order>> ListAsync(string userId);
     Task<Order?> FindByIdempotencyKeyAsync(string userId, string idempotencyKey);
@@ -18,7 +22,23 @@ public class OrderStore : IOrderRepository
     public void Add(Order o) => _orders[o.Id] = o;
     public Order? Find(Guid id) => _orders.GetValueOrDefault(id);
 
-    public Task AddAsync(Order o) { Add(o); return Task.CompletedTask; }
+    private readonly object _keys = new();
+
+    public Task<bool> TryAddAsync(Order o)
+    {
+        lock (_keys)   // same rule as the database's unique (user, key) index
+        {
+            if (o.IdempotencyKey is not null
+                && _orders.Values.Any(x => x.UserId == o.UserId && x.IdempotencyKey == o.IdempotencyKey))
+                return Task.FromResult(false);
+            Add(o);
+            return Task.FromResult(true);
+        }
+    }
+
+    public Task<bool> CompletePendingAsync(Guid id, string status) =>
+        Task.FromResult(_orders.TryGetValue(id, out var o) && o.Status == OrderStatus.Pending
+            && _orders.TryUpdate(id, o with { Status = status }, o));
 
     public Task<Order?> FindAsync(Guid id, string userId)
     {
@@ -55,11 +75,25 @@ public class OrdersDbContext(DbContextOptions<OrdersDbContext> options) : DbCont
 
 public class EfOrderRepository(OrdersDbContext db) : IOrderRepository
 {
-    public async Task AddAsync(Order order)
+    public async Task<bool> TryAddAsync(Order order)
     {
         db.Orders.Add(order);
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+            return true;
+        }
+        catch (DbUpdateException e) when (e.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation })
+        {
+            db.Entry(order).State = EntityState.Detached;   // not stored: do not retry it on the next save
+            return false;
+        }
     }
+
+    // A single conditional UPDATE: never overwrites a final status, whoever completes first wins.
+    public async Task<bool> CompletePendingAsync(Guid id, string status) =>
+        await db.Orders.Where(o => o.Id == id && o.Status == OrderStatus.Pending)
+            .ExecuteUpdateAsync(s => s.SetProperty(o => o.Status, status)) == 1;
 
     public Task<Order?> FindAsync(Guid id, string userId) =>
         db.Orders.AsNoTracking().FirstOrDefaultAsync(o => o.Id == id && o.UserId == userId);

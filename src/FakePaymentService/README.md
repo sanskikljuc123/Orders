@@ -11,6 +11,13 @@ The contract below is assumed from `HttpPaymentClient` in `src/Orders.Api/Progra
 - `POST /charge` with JSON `{ "amount": <decimal> }`
 - `200` with `{ "approved": true|false }`; any non-2xx is treated by the API as "not paid".
 
+- **FAKED for this example (not from any spec):** an `Idempotency-Key` request header. The first
+  answer (approved or declined) for a key is stored and returned again for the same key without a
+  new charge; a provider error (500) is not stored, so a retry with that key is processed normally.
+  Modelled on Stripe's public documentation of idempotent requests, because the Orders API sends
+  its order id as the key to never charge an order twice. Allowed here as an exception to the
+  "fakes come from contracts" rule (CLAUDE.md); every test that relies on it says so.
+
 Replace this assumption with the provider's spec or recorded responses before relying on it.
 
 ## Shared contract and contract tests
@@ -29,5 +36,6 @@ timeout after `Payment:TimeoutSeconds`, default 10) as not paid.
 | Endpoint | Body | Effect |
 |---|---|---|
 | `POST /__admin/mode` | `{ "mode": "approve" \| "decline" \| "error" }` | `error` answers `/charge` with 500 |
-| `POST /__admin/reset` | none | back to `approve` (E2E calls this after every scenario) |
+| `POST /__admin/reset` | none | back to `approve`, forget stored keys, charge count 0 (E2E calls this after every scenario) |
+| `GET /__admin/charges` | none | `{ "count": n }`: charges actually processed (replays not counted) |
 | `GET /` | none | shows the current mode (also the Aspire health check) |

@@ -37,7 +37,7 @@ public sealed class PaymentWiringTests : IDisposable
         Assert.IsType<HttpPaymentClient>(payment);   // the real client, not the AlwaysApproved fallback
 
         var clock = Stopwatch.StartNew();
-        var charge = payment.ChargeAsync(10m);
+        var charge = payment.ChargeAsync(10m, Guid.NewGuid());
         // Generous upper bound for a 1 s timeout; with the 100 s default this gives up first.
         var finished = await Task.WhenAny(charge, Task.Delay(TimeSpan.FromSeconds(10))) == charge;
 

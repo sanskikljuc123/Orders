@@ -43,7 +43,7 @@ public class IdempotencyTests
         var b = (await again.Content.ReadFromJsonAsync<Order>())!;
         Assert.Equal(a.Id, b.Id);
         Assert.Equal(1, await RowsWithProductAsync(product));
-        A.CallTo(() => _fixture.Payment.ChargeAsync(20m)).MustHaveHappenedOnceExactly();
+        A.CallTo(() => _fixture.Payment.ChargeAsync(20m, A<Guid>._)).MustHaveHappenedOnceExactly();
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public class IdempotencyTests
         Assert.Equal(HttpStatusCode.UnprocessableEntity, reused.StatusCode);
         Assert.Contains("'Idempotency-Key' was already used for a different order.", await reused.Content.ReadAsStringAsync());
         Assert.False(reused.Headers.Contains("Idempotent-Replayed"));
-        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._)).MustHaveHappenedOnceExactly();   // the first order only
+        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustHaveHappenedOnceExactly();   // the first order only
         Assert.Equal(1, await RowsWithProductAsync(product));
     }
 
@@ -72,9 +72,9 @@ public class IdempotencyTests
         var key = Guid.NewGuid().ToString();
         var product = $"Book-{Guid.NewGuid():N}";
         var charging = new TaskCompletionSource();
-        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._)).ReturnsLazily(async () => { await charging.Task; return true; });
+        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._, A<Guid>._)).ReturnsLazily(async () => { await charging.Task; return true; });
         var locks = _fixture.Services.GetRequiredService<IdempotencyLocks>();
-        var lockKey = $"{SubjectOf(ana)}\n{key}";
+        var lockKey = $"{StackFixture.SubjectOf(ana)}\n{key}";
 
         var requests = Enumerable.Range(0, 3).Select(_ => ana.SendAsync(Post(new CreateOrderRequest(product, 1), key))).ToList();
         // All three hold or wait for the same lock before the charge is released (no fixed sleep).
@@ -82,20 +82,12 @@ public class IdempotencyTests
         charging.SetResult();
         var responses = await Task.WhenAll(requests);
 
-        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._)).MustHaveHappenedOnceExactly();
+        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustHaveHappenedOnceExactly();
         Assert.All(responses, r => Assert.Equal(HttpStatusCode.Created, r.StatusCode));
         var ids = await Task.WhenAll(responses.Select(async r => (await r.Content.ReadFromJsonAsync<Order>())!.Id));
         Assert.Single(ids.Distinct());
         Assert.Equal(1, await RowsWithProductAsync(product));
         Assert.True(allQueued, "all three requests should have waited on the same shared lock");
-    }
-
-    /// <summary>The token's "sub" claim: the user id the API locks and stores orders under.</summary>
-    private static string SubjectOf(HttpClient client)
-    {
-        var payload = client.DefaultRequestHeaders.Authorization!.Parameter!.Split('.')[1].Replace('-', '+').Replace('_', '/');
-        var json = Convert.FromBase64String(payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '='));
-        return System.Text.Json.JsonDocument.Parse(json).RootElement.GetProperty("sub").GetString()!;
     }
 
     [Fact]
@@ -137,7 +129,7 @@ public class IdempotencyTests
         Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
         var problem = await res.Content.ReadFromJsonAsync<Microsoft.AspNetCore.Http.HttpValidationProblemDetails>();
         Assert.Equal(["'Idempotency-Key' must be 1 to 100 characters."], problem!.Errors["Idempotency-Key"]);
-        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._)).MustNotHaveHappened();
+        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustNotHaveHappened();
     }
 
     [Fact]
@@ -159,7 +151,7 @@ public class IdempotencyTests
 
         Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
         Assert.Contains("'Idempotency-Key' must be 1 to 100 characters.", await res.Content.ReadAsStringAsync());
-        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._)).MustNotHaveHappened();
+        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustNotHaveHappened();
     }
 
     [Fact]

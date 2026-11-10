@@ -59,11 +59,16 @@
         })
       });
       const out = $('result');
-      if (res.ok) { orderAttemptKey = crypto.randomUUID(); out.textContent = 'Order ' + (await res.json()).status; await loadOrders(); }
+      // 202: charged (or attempted) but not confirmed yet. Keep the same key: ordering again with
+      // it settles this order instead of placing a new one.
+      if (res.status === 202) { out.textContent = 'Order Pending: payment not confirmed yet. Place the order again to retry.'; await loadOrders(); }
+      else if (res.ok) { orderAttemptKey = crypto.randomUUID(); out.textContent = 'Order ' + (await res.json()).status; await loadOrders(); }
       else if (res.status === 401) { out.textContent = 'Please log in'; }
       // The key already placed an order (e.g. its answer was lost) and the form changed since:
       // that order stands, so show it and start a new attempt.
       else if (res.status === 422) { orderAttemptKey = crypto.randomUUID(); out.textContent = 'Your earlier order was already placed, see My orders'; await loadOrders(); }
+      // 5xx: not placed and nothing charged; the same key makes a retry safe.
+      else if (res.status >= 500) { out.textContent = 'Order not placed, nothing was charged. Please try again.'; }
       else { out.textContent = 'Validation error'; }
     };
 
