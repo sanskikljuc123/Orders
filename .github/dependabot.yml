@@ -1,0 +1,29 @@
+# Update PRs for NuGet packages (Directory.Packages.props, central package management) and GitHub
+# Actions. Each PR runs the full CI, so a bump is only merged after the whole test suite passed
+# (CLAUDE.md: "Dependency bumps: one PR, full test run"). Security updates are opened as soon as an
+# advisory is published, independent of this schedule.
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # Packages that must move together (same release train).
+      aspnetcore-and-ef:
+        patterns: ["Microsoft.AspNetCore.*", "Microsoft.EntityFrameworkCore*", "Microsoft.Extensions.*"]
+      aspire:
+        patterns: ["Aspire.*"]
+      testing:
+        patterns: ["xunit*", "Microsoft.NET.Test.Sdk", "coverlet.*", "FakeItEasy", "Testcontainers*", "Reqnroll*"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]

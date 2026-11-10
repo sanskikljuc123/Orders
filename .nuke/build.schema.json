@@ -139,6 +139,10 @@
           "description": "How many times Stability runs each test project",
           "format": "int32"
         },
+        "ScanImages": {
+          "type": "boolean",
+          "description": "Scan images with Trivy (HIGH/CRITICAL with a fix fail the build). Default: on, where Trivy runs (Linux x64)"
+        },
         "SmokeCluster": {
           "type": "string",
           "description": "kind cluster name for DeploySmoke"

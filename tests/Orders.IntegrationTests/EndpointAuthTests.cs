@@ -85,4 +85,16 @@ public class EndpointAuthTests
         Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
         A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._)).MustNotHaveHappened();
     }
+
+    [Fact]
+    public async Task Token_issued_to_another_client_of_the_realm_returns_401()
+    {
+        // Same Keycloak, same user, same issuer, but issued to the realm's built-in admin-cli
+        // client: it lacks the "orders-api" audience, so the API must not accept it.
+        var foreign = await _fixture.CreateClientAsAsync("ana", clientId: "admin-cli");
+        var own = await _fixture.CreateClientAsAsync("ana");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await foreign.GetAsync("/me")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await own.GetAsync("/me")).StatusCode);
+    }
 }

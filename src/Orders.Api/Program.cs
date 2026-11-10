@@ -73,7 +73,9 @@ if (authEnabled)
         {
             o.Authority = authority;
             o.RequireHttpsMetadata = !allowInsecureHttp;
-            o.TokenValidationParameters.ValidateAudience = false;
+            // Only tokens issued for this API (aud "orders-api", added by the realm's audience mapper
+            // on orders-web). Without it a token for any other client of the realm was accepted.
+            o.Audience = builder.Configuration["Auth:Audience"] ?? "orders-api";
         })
         .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, o =>
         {

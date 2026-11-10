@@ -13,6 +13,18 @@ public class ProductionRealmTests
         .Single(c => c.GetProperty("clientId").GetString() == "orders-web");
 
     [Fact]
+    public void Web_client_tokens_carry_the_api_audience()
+    {
+        // The API only accepts aud "orders-api" (Program.cs); without this mapper nobody can call it.
+        var audience = WebClient.GetProperty("protocolMappers").EnumerateArray()
+            .Single(m => m.GetProperty("protocolMapper").GetString() == "oidc-audience-mapper")
+            .GetProperty("config");
+
+        Assert.Equal("orders-api", audience.GetProperty("included.custom.audience").GetString());
+        Assert.Equal("true", audience.GetProperty("access.token.claim").GetString());
+    }
+
+    [Fact]
     public void Contains_no_users()
         => Assert.False(Realm.TryGetProperty("users", out _), "production realm must not ship users");
 

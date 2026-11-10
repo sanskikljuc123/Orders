@@ -1,0 +1,26 @@
+<Project>
+  <!--
+    NuGet audit on every restore (local, CI, Dependabot PRs): direct and transitive packages are
+    checked against the GitHub Advisory Database. High (NU1903) and critical (NU1904) advisories
+    fail the build; low/moderate stay warnings. Fix by upgrading (Directory.Packages.props, also
+    transitive pins), never by suppressing without a written reason.
+  -->
+  <PropertyGroup>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1903;NU1904</WarningsAsErrors>
+  </PropertyGroup>
+
+  <!--
+    Static security analysis on every build (the free alternative to CodeQL, which needs a paid
+    licence for private repositories): every .NET security rule on (also those off by default,
+    e.g. CA5404 audience validation), and analyzer findings fail the build. Suppress only in code,
+    with the reason (see tests/TestSupport/RandomTestOrder.cs).
+  -->
+  <PropertyGroup>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisModeSecurity>All</AnalysisModeSecurity>
+    <CodeAnalysisTreatWarningsAsErrors>true</CodeAnalysisTreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>

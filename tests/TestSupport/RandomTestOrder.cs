@@ -1,3 +1,6 @@
+// CA5394 (insecure Random): deliberate. The order must come from a printed seed so a failing
+// order can be replayed (TEST_ORDER_SEED); nothing here is security-relevant.
+#pragma warning disable CA5394
 using Xunit.Abstractions;
 using Xunit.Sdk;
 

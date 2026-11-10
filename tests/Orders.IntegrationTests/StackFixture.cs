@@ -51,22 +51,23 @@ public class StackFixture : OrdersApiFactory, IAsyncLifetime
         _ => throw new ArgumentOutOfRangeException(nameof(user), user, "Not a user in the test realm")
     };
 
-    public async Task<HttpClient> CreateClientAsAsync(string user)
+    /// <summary>Signed in as a test user. clientId: the Keycloak client the token is issued to.</summary>
+    public async Task<HttpClient> CreateClientAsAsync(string user, string clientId = "orders-web")
     {
-        if (!_tokens.TryGetValue(user, out var token))
+        if (!_tokens.TryGetValue($"{user}@{clientId}", out var token))
         {
             using var http = new HttpClient();
             var res = await http.PostAsync($"{Authority}/protocol/openid-connect/token",
                 new FormUrlEncodedContent(new Dictionary<string, string>
                 {
                     ["grant_type"] = "password",
-                    ["client_id"] = "orders-web",
+                    ["client_id"] = clientId,
                     ["username"] = user,
                     ["password"] = PasswordFor(user),
                 }));
             res.EnsureSuccessStatusCode();
             token = (await res.Content.ReadFromJsonAsync<TokenResponse>())!.AccessToken;
-            _tokens[user] = token;   // never logged
+            _tokens[$"{user}@{clientId}"] = token;   // never logged
         }
 
         var client = CreateClient();
