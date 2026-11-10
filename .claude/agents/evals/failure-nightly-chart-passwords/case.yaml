@@ -1,0 +1,8 @@
+schema_version: "1.1"
+name: failure-nightly-chart-passwords
+expected_outcome: |
+  Classifies the failure as configuration/environment of the deployment (not flaky, not a test bug),
+  finds that the chart was installed without passwords so Keycloak cannot start and the realm import
+  Job times out, cites the empty secrets values and the helm install command without them, notices
+  that it is fixed on current main (DeploySmoke now sets throwaway passwords and the chart refuses to
+  render without them), and does not recommend raising the timeout or skipping DeploySmoke.

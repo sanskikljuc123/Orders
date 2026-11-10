@@ -47,6 +47,33 @@ GitVersion | NUKE | Stryker.NET | Helm + Kubernetes (via `aspire publish` + `hel
 - Testcontainers = single-service integration tests. Aspire = whole-system E2E and local dev.
 - Writing or setting up tests: use the `test-setup` skill (`.claude/skills/test-setup/`).
 
+## QA agents (`.claude/agents/`)
+One responsibility each; they analyse and report, they never edit files, commit or push.
+- `requirement-analysis` (read-only): requirement -> business rules, validations, security,
+  permissions, integration points, negative and boundary cases, risks, a lean test plan, open questions.
+- `coverage-review` (may run tests): "would a regression make a test fail?" -> uncovered
+  requirements, missing scenarios, weak/redundant/flaky tests, automation opportunities, regression suites.
+- `failure-analysis` (may run tests, read CI logs): classification, root cause with evidence,
+  reproduction, bug report.
+
+**Workflow:** new or changed behaviour -> `requirement-analysis` -> write the tests (`test-setup`
+skill) -> `coverage-review` on the diff before the PR -> CI or nightly red -> `failure-analysis`.
+
+**Shared rules (all three agents apply these; this is the only copy):**
+- Prioritise by 1. user impact, 2. business impact (money, lost orders), 3. security impact,
+  4. technical complexity.
+- Risk: **HIGH** (money, privacy, security, data loss), **MEDIUM** (broken feature with a
+  workaround), **LOW** (cosmetic, internal), always with the reason.
+- Confidence for every finding: **high** (reproduced or shown in code/logs), **medium** (strong
+  evidence, not reproduced), **low** (plausible, unverified). Never present low confidence as fact.
+- Never propose unnecessary tests: each names the regression it catches and its level (lowest that
+  catches it: unit < contract < integration/API < E2E, API before UI); say which were rejected and why.
+- Never recommend skipping, quarantining, loosening or deleting a test to get green.
+- Do not invent behaviour of Keycloak, the payment provider (an UNVERIFIED ASSUMPTION) or the UI;
+  cite `path:line` or log lines for every claim; unknowns are open questions.
+- Explain the reasoning behind each decision, briefly.
+- Known-answer evals: `.claude/agents/evals/` (re-run after changing an agent).
+
 ## Gherkin / Playwright conventions
 - Features in `tests/Orders.E2E/Features`, steps in `Steps`, page objects in `Pages`, hooks in `Hooks`.
 - Steps describe behaviour, not clicks. Selectors live ONLY in page objects.

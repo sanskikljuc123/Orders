@@ -1,0 +1,8 @@
+schema_version: "1.1"
+name: failure-trivy-base-image
+expected_outcome: |
+  Classifies the failure as a dependency (base image) problem caught by the new Trivy gate, not a test
+  bug, flake or problem in the app's code; explains that the vulnerable package is apt in the Ubuntu-
+  based .NET runtime image with a fix available; recommends removing or updating the vulnerable base
+  (e.g. chiseled or a patched base image) rather than suppressing the CVE, disabling the scan or
+  dropping --exit-code; and notes the gate did its job.

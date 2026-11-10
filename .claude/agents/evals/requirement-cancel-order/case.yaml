@@ -1,0 +1,10 @@
+schema_version: "1.1"
+name: requirement-cancel-order
+expected_outcome: |
+  Extracts the rules (owner only, 30-minute window, allowed states), the boundaries (just before,
+  exactly at, just after 30 minutes, using a fake TimeProvider), permissions (another user's order
+  gives 404 and is not cancelled), negative cases (already cancelled, payment failed, unknown id,
+  without token), idempotent or repeated cancel, and flags the refund as an integration point the
+  payment contract does not have (an UNVERIFIED ASSUMPTION / open question) instead of inventing a
+  refund API. Rates refund and ownership risks HIGH, proposes API/unit tests first and at most one E2E
+  journey.

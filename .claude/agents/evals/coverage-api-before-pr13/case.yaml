@@ -1,0 +1,8 @@
+schema_version: "1.1"
+name: coverage-api-before-pr13
+expected_outcome: |
+  Finds the real gaps of that commit: POST /orders (the endpoint that charges money) has no test that
+  it rejects a request without a token (only GET /orders and /me are checked for 401); broken input
+  (malformed or empty JSON, wrong content type, a non-Guid id) is untested; expired tokens are not
+  tested. Ranks the missing 401 on POST /orders as HIGH, proposes integration/API tests rather than
+  E2E, and does not propose tests for behaviour that is already covered.
