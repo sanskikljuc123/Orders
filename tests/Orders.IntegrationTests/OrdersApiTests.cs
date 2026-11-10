@@ -82,4 +82,47 @@ public class OrdersApiTests : IClassFixture<OrdersApiFactory>
 
         Assert.Equal(HttpStatusCode.NotFound, res.StatusCode);
     }
+
+    [Theory]
+    [InlineData("{\"productName\": \"Book\", \"quantity\": ", "application/json")]   // cut-off JSON
+    [InlineData("", "application/json")]                                         // empty body
+    [InlineData("{\"productName\": \"Book\", \"quantity\": \"two\"}", "application/json")]   // wrong type
+    public async Task Unreadable_order_body_returns_400_and_is_not_charged(string body, string contentType)
+    {
+        var res = await _client.PostAsync("/orders", new StringContent(body, System.Text.Encoding.UTF8, contentType));
+
+        Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
+        A.CallTo(() => _factory.Payment.ChargeAsync(A<decimal>._)).MustNotHaveHappened();
+    }
+
+    [Fact]
+    public async Task Order_sent_as_plain_text_returns_415_and_is_not_charged()
+    {
+        var res = await _client.PostAsync("/orders",
+            new StringContent("{\"productName\": \"Book\", \"quantity\": 1}", System.Text.Encoding.UTF8, "text/plain"));
+
+        Assert.Equal(HttpStatusCode.UnsupportedMediaType, res.StatusCode);
+        A.CallTo(() => _factory.Payment.ChargeAsync(A<decimal>._)).MustNotHaveHappened();
+    }
+
+    [Fact]
+    public async Task Order_id_that_is_not_a_guid_returns_404()
+    {
+        var res = await _client.GetAsync("/orders/not-a-guid");
+
+        Assert.Equal(HttpStatusCode.NotFound, res.StatusCode);
+    }
+
+    [Fact]
+    public async Task Order_response_has_exactly_the_fields_callers_read()
+    {
+        // Renaming, adding or removing a field changes the API for every caller: make it a decision.
+        var res = await _client.PostAsJsonAsync("/orders", new CreateOrderRequest($"Book-{Guid.NewGuid():N}", 1));
+        var body = await res.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+
+        var fields = body.EnumerateObject().Select(p => p.Name).Order().ToArray();
+
+        Assert.Equal(["createdAt", "id", "productName", "quantity", "status", "userId"], fields);
+        Assert.Equal("application/json; charset=utf-8", res.Content.Headers.ContentType?.ToString());
+    }
 }

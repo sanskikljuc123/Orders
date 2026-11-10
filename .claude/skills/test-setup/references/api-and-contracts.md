@@ -11,6 +11,7 @@ For each endpoint that matters, cover what a caller depends on:
 | Auth | No token → 401; invalid/expired token → 401; valid token, wrong user/role → 403 (or 404 if the API hides existence) |
 | Authorization / tenancy | User A cannot read, list, update or delete user B's resource |
 | Validation | Each rule rejects with the specific field and message; boundaries (min-1, min, max, max+1), empty, null, unicode, oversized |
+| Broken input | Cut-off or empty JSON, wrong JSON types, wrong content type (415), route values of the wrong type (`/orders/not-a-guid` → 404): never a 500, never a side effect |
 | Pagination | First/last page, page size limits, stable ordering, `next` link/cursor, empty result |
 | Idempotency | Repeating a PUT/DELETE, or a POST with the same idempotency key, has no extra side effect (e.g. one charge, one record) |
 | Side effects | The DB row / message / email actually exists, read back through a separate path |
@@ -19,6 +20,25 @@ For each endpoint that matters, cover what a caller depends on:
 
 Assert values, not just the status: `201` *and* `body.status == "Paid"` *and* the `Location`
 header points to a fetchable resource.
+
+### Make the checklist enforceable
+
+A checklist that relies on memory leaves gaps: coverage and mutation tools measure *your* code,
+so framework behaviour (a missing `RequireAuthorization`, bad JSON becoming a 500) stays green.
+
+- **Discover endpoints, don't list them.** Read `EndpointDataSource` from the running app
+  (`factory.Services`), call every endpoint without a token and expect 401, except an explicit
+  `Public` allow-list (health, login). A new unprotected endpoint then fails the build without
+  anyone writing a test. Add a positive test that the discovery finds the known endpoints, so the
+  check cannot pass by finding nothing. Route groups report patterns with a trailing `/`; trim it.
+- **Keep an endpoint × check matrix** in the risk map (`TESTING.md`): one row per endpoint, one
+  column per area above. An empty cell is a visible gap; "n/a" is a decision.
+- **Lock the response shape**: assert the exact set of field names, so adding, renaming or
+  removing a field is a reviewed decision.
+- **Expired tokens**: JwtBearer's lifetime check uses the system clock, not `TimeProvider`, so a
+  fake clock does not expire a token. Rather than waiting out a real lifetime plus the 5-minute
+  clock skew, guard the options (`ValidateLifetime`, `RequireExpirationTime`,
+  `RequireSignedTokens`, `ClockSkew`) and say that the library enforces them.
 
 ## Consumer-driven contract tests (Pact)
 

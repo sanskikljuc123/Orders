@@ -77,4 +77,19 @@ public class AuthApiTests
         Assert.Contains(anas, names);
         Assert.DoesNotContain(bobs, names);
     }
+
+    [Fact]
+    public async Task Users_list_shows_orders_oldest_first()
+    {
+        var ana = await _fixture.CreateClientAsAsync("ana");
+        var first = $"First {Guid.NewGuid():N}";
+        var second = $"Second {Guid.NewGuid():N}";
+        await ana.PostAsJsonAsync("/orders", new CreateOrderRequest(first, 1));
+        await ana.PostAsJsonAsync("/orders", new CreateOrderRequest(second, 1));
+
+        var names = (await ana.GetFromJsonAsync<List<Order>>("/orders"))!.Select(o => o.ProductName).ToList();
+
+        Assert.Contains(first, names);
+        Assert.True(names.IndexOf(first) < names.IndexOf(second), "the older order must come first");
+    }
 }

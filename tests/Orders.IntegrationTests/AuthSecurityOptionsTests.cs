@@ -58,6 +58,23 @@ public class AuthSecurityOptionsTests
         Assert.Equal(CookieSecurePolicy.SameAsRequest, cookie.Cookie.SecurePolicy);
     }
 
+    [Theory]
+    [InlineData("Production")]
+    [InlineData("Development")]
+    public void Expired_or_unsigned_tokens_are_rejected_in_every_environment(string environment)
+    {
+        // Testing a real expired token would mean waiting out Keycloak's lifetime plus the clock
+        // skew (JwtBearer's lifetime check does not use TimeProvider), so this guards the settings
+        // the library's own checks depend on instead.
+        var jwt = OptionsIn(environment).Jwt.TokenValidationParameters;
+
+        Assert.True(jwt.ValidateLifetime);
+        Assert.True(jwt.RequireExpirationTime);
+        Assert.True(jwt.RequireSignedTokens);
+        Assert.True(jwt.ValidateIssuer);
+        Assert.True(jwt.ClockSkew <= TimeSpan.FromMinutes(5), $"clock skew {jwt.ClockSkew} lets expired tokens in for too long");
+    }
+
     [Fact]
     public async Task Login_cookie_sessions_live_on_the_server_so_logout_can_revoke_them()
     {

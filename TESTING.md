@@ -32,13 +32,28 @@ browser), **N** nightly only (`.github/workflows/ci-nightly.yml`).
 
 | Risk | Tests |
 |---|---|
-| Anonymous or forged requests accepted | I `Request_without_token_returns_401`, `Request_with_garbage_token_returns_401` |
+| Anonymous or forged requests accepted (incl. a new endpoint someone forgot to protect) | I `EndpointAuthTests` (every endpoint found in the app, except the public list, returns 401; an order without a token is not charged), `Request_without_token_returns_401`, `Request_with_garbage_token_returns_401` |
+| Expired tokens accepted | I `AuthSecurityOptionsTests.Expired_or_unsigned_tokens_are_rejected_in_every_environment` (guards the settings; JwtBearer enforces them) |
 | A user sees another user's orders | U `OrderStoreTests`; I `User_cannot_fetch_another_users_order`, `Users_list_contains_only_their_own_orders`; E "A user never sees another user's orders" (both directions) |
 | Logout leaves the user signed in (app or Keycloak) | E "Customer who logs out is asked to log in again", "… can no longer place an order", "… must enter their password again" |
 | A copied cookie still works after logout | U `SessionStoreTests`; I `Login_cookie_sessions_live_on_the_server_so_logout_can_revoke_them`; E "A copy of the session cookie stops working after logout" |
 | Production runs with the plain-http dev login settings | I `AuthSecurityOptionsTests.Production_requires_https_and_secure_cookies` |
 | Production realm gets test users, wildcards, plain HTTP or password login | U `ProductionRealmTests`; N `DeploySmoke` (realm in a real cluster: HTTPS-only, no users) |
 | Test realm or generated passwords reach git or a deployment | `.gitignore` (`k8s-artifacts/`); AppHost imports the test realm only outside publish mode (not automated: reviewed) |
+
+## API endpoints
+
+What each caller depends on, per endpoint (all I unless marked). A new or changed endpoint gets its
+row filled in; an empty cell is a gap, "n/a" a decision.
+
+| Endpoint | No / bad token | Other user's data | Success contract | Invalid / broken input | Not found / empty |
+|---|---|---|---|---|---|
+| `POST /orders` | 401, not charged (`EndpointAuthTests`) | n/a (always the caller's) | 201, `Location`, exact fields (`Order_response_has_exactly_the_fields_callers_read`), Paid / PaymentFailed, charge, idempotency (`IdempotencyTests`) | 400 per field (`Invalid_order_…`), cut-off / empty / wrong-type JSON 400 (`Unreadable_order_body_…`), text/plain 415 — none charged | n/a |
+| `GET /orders` | 401 | only own orders (U I E) | oldest first (`Users_list_shows_orders_oldest_first`) | n/a | new user gets `[]` (`NewUserTests`) |
+| `GET /orders/{id}` | 401 | 404 (`User_cannot_fetch_another_users_order`) | fetched from `Location` | not a Guid → 404 | unknown id → 404 |
+| `GET /me` | 401 | n/a | name (`Me_returns_the_signed_in_users_name`) | n/a | n/a |
+| `GET /health` | public on purpose | n/a | `Healthy`: E2E startup, N `DeploySmoke` | n/a | n/a |
+| `GET /login`, `/logout` | public on purpose | n/a | E `Login.feature`, `Logout.feature` | n/a | n/a |
 
 ## Delivery
 
@@ -52,6 +67,9 @@ browser), **N** nightly only (`.github/workflows/ci-nightly.yml`).
 | Coverage quietly drops on critical code | `CoverageGate` (merged report, per-class floors) on every pull request |
 
 ## Known gaps
+
+- Open API decisions, tested as they are today: the same `Idempotency-Key` with a *different* body
+  returns the first order (Stripe-style APIs answer 422); the order response includes `userId`.
 
 - The real payment provider (see above).
 - Multiple API replicas: sessions and idempotency locks are in-memory; only the database index

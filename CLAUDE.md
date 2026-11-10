@@ -18,6 +18,8 @@ test platform. How to run it: [`README.md`](README.md). Which test covers which 
 - [ ] `dotnet build` green; the affected test projects green, real summary shown.
 - [ ] New behaviour has a test that goes red when the behaviour is broken (mutation-checked).
 - [ ] `TESTING.md` row updated; "How it works now" below updated if behaviour changed.
+- [ ] New or changed API endpoint: its row in the `TESTING.md` endpoint matrix is filled in
+      (`EndpointAuthTests` already fails for any endpoint without a login unless it is listed as public).
 - [ ] Committed (no AI attribution), then asked before pushing.
 
 ## Stack
