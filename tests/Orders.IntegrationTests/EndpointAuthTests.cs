@@ -12,7 +12,11 @@ using Microsoft.Extensions.DependencyInjection;
 public class EndpointAuthTests
 {
     /// <summary>Reachable without a token, on purpose. Adding to this list is a reviewed decision.</summary>
-    private static readonly HashSet<string> Public = ["GET /health", "GET /login", "GET /logout"];
+    private static readonly HashSet<string> Public =
+    [
+        "GET /health", "GET /login", "GET /logout",
+        "GET /openapi/{documentName}.json",   // Development only (Program.cs); OpenApiContractTests checks production 404
+    ];
 
     private readonly StackFixture _fixture;
 

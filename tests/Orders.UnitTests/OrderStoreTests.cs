@@ -3,7 +3,7 @@ public class OrderStoreTests
     private readonly OrderStore _store = new();
 
     private static Order OrderFor(string userId, string product) =>
-        new(Guid.NewGuid(), product, 1, "Paid", userId, DateTimeOffset.UnixEpoch);
+        new(Guid.NewGuid(), product, 1, "Paid", userId, DateTimeOffset.UnixEpoch, IdempotencyKey: null);
 
     [Fact]
     public async Task User_cannot_find_another_users_order()
