@@ -7,6 +7,7 @@ namespace Orders.E2E.Steps;
 public class OrderContext
 {
     public string? LastProduct { get; set; }
+    public List<string> OrderAttemptKeys { get; } = [];
 }
 
 [Binding]
@@ -85,4 +86,26 @@ public class OrderSteps(ScenarioBrowser browser, OrderContext ordered)
     [Then("my order list does not contain {string}")]
     public Task MyListDoesNotContain(string product) =>
         Assertions.Expect(Shop.MyOrders.Filter(new() { HasText = product })).ToHaveCountAsync(0);
+
+    [Given("the shop answers my next order as pending")]
+    public Task NextOrderPending() => AnswerNextOrderWith(202);
+
+    [Given("the shop fails my next order with a server error")]
+    public Task NextOrderFails() => AnswerNextOrderWith(503);
+
+    private Task AnswerNextOrderWith(int status)
+    {
+        Shop.RecordOrderAttemptKeys(ordered.OrderAttemptKeys);
+        return Shop.AnswerNextOrderAsync(status);
+    }
+
+    [When("I place the same order again")]
+    public Task PlaceSameOrderAgain() => Shop.PlaceSameOrderAgainAsync();
+
+    [Then("both order attempts were sent as the same order attempt")]
+    public void SameOrderAttempt()
+    {
+        Assert.Equal(2, ordered.OrderAttemptKeys.Count);
+        Assert.Single(ordered.OrderAttemptKeys.Distinct());   // same key: the server settles, never a second order
+    }
 }
