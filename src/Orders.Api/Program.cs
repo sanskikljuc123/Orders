@@ -17,9 +17,11 @@ builder.Host.UseServiceProviderFactory(new AutofacServiceProviderFactory());
 builder.Host.ConfigureContainer<ContainerBuilder>(c =>
 {
     c.RegisterType<OrderService>();
+    c.RegisterType<IdempotencyLocks>().SingleInstance();
     c.RegisterType<CreateOrderValidator>().As<IValidator<CreateOrderRequest>>().SingleInstance();
 });
 builder.Services.AddFusionCache();
+builder.Services.AddSingleton(TimeProvider.System);   // replaced with a fixed clock in tests
 builder.Services.AddHealthChecks();
 
 var paymentUrl = builder.Configuration["Payment:BaseUrl"];
@@ -159,6 +161,8 @@ if (authEnabled)
 orders.MapPost("", async (
     CreateOrderRequest req,
     ClaimsPrincipal user,
+    HttpContext http,
+    [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
     [FromServices] IValidator<CreateOrderRequest> validator,
     [FromServices] OrderService orderService) =>
 {
@@ -166,8 +170,16 @@ orders.MapPost("", async (
     if (!result.IsValid)
         return Results.ValidationProblem(result.ToDictionary());
 
-    var order = await orderService.PlaceOrderAsync(req, UserIds.Get(user));
-    return Results.Created($"/orders/{order.Id}", order);
+    if (idempotencyKey is not null && (string.IsNullOrWhiteSpace(idempotencyKey) || idempotencyKey.Length > 100))
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["Idempotency-Key"] = ["'Idempotency-Key' must be 1 to 100 characters."]
+        });
+
+    var placed = await orderService.PlaceOrderAsync(req, UserIds.Get(user), idempotencyKey);
+    if (placed.Replayed)
+        http.Response.Headers["Idempotent-Replayed"] = "true";   // same order, not charged again
+    return Results.Created($"/orders/{placed.Order.Id}", placed.Order);
 });
 
 orders.MapGet("", async (
@@ -199,7 +211,8 @@ public record Order(
     int Quantity,
     string Status,
     string UserId = "anonymous",
-    DateTimeOffset CreatedAt = default);
+    DateTimeOffset CreatedAt = default,
+    [property: System.Text.Json.Serialization.JsonIgnore] string? IdempotencyKey = null);
 
 public class CreateOrderValidator : AbstractValidator<CreateOrderRequest>
 {

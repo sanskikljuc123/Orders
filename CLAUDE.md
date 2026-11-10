@@ -80,7 +80,11 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
   Guarded by `AuthSecurityOptionsTests`.
 - Login sessions are stored server-side (`SessionStore`, in-memory FusionCache): the cookie holds
   only a key and logout revokes it. Limitation: an API restart logs everyone out and sessions are
-  not shared between replicas; run one API replica or add a distributed L2 cache first. Deployed Keycloak needs HTTPS: `Auth__Authority` in
+  not shared between replicas; run one API replica or add a distributed L2 cache first.
+- Orders are idempotent: the UI sends an `Idempotency-Key` per order attempt; a repeated key
+  returns the first order (header `Idempotent-Replayed: true`) without charging again. Concurrent
+  requests with one key are serialized in-process; a unique (UserId, IdempotencyKey) index is the
+  backstop across replicas. Deployed Keycloak needs HTTPS: `Auth__Authority` in
   `deploy/values.dev.yaml` is a PLACEHOLDER (`https://auth.example.com/realms/orders`).
 - E2E locally where the Playwright download is blocked: `E2E_CHROMIUM_PATH=<installed chrome>`
   and `E2E_VIDEO=0` are a local-only workaround; CI must install the matching browser.

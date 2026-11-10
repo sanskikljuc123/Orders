@@ -29,6 +29,34 @@ public class OrderPage(IPage page)
         await PlaceOrderButton.ClickAsync();
     }
 
+    /// <summary>
+    /// Fills the form and double-clicks "Place order" (an impatient customer), then waits until the
+    /// server has answered both order requests, so the order list is checked only afterwards.
+    /// </summary>
+    public async Task PlaceOrderWithDoubleClickAsync(string product, int quantity)
+    {
+        await page.GetByLabel("Product", new() { Exact = true }).FillAsync(product);
+        await page.GetByLabel("Quantity", new() { Exact = true }).FillAsync(quantity.ToString());
+
+        var answered = 0;
+        var bothAnswered = new TaskCompletionSource();
+        void OnResponse(object? _, IResponse r)
+        {
+            if (r.Request.Method == "POST" && r.Url.EndsWith("/orders") && Interlocked.Increment(ref answered) == 2)
+                bothAnswered.TrySetResult();
+        }
+        page.Response += OnResponse;
+        try
+        {
+            await PlaceOrderButton.DblClickAsync();
+            await bothAnswered.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        }
+        finally
+        {
+            page.Response -= OnResponse;
+        }
+    }
+
     public async Task LogOutAsync()
     {
         await OpenAsync();

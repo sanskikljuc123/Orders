@@ -24,6 +24,21 @@ public class OrderSteps(ScenarioBrowser browser, OrderContext ordered)
         await Shop.PlaceOrderAsync(ordered.LastProduct, quantity);
     }
 
+    [When("I order {int} of {string} with a double click")]
+    public async Task OrderWithDoubleClick(int quantity, string product)
+    {
+        ordered.LastProduct = $"{product} {Guid.NewGuid().ToString("N")[..8]}";
+        await Shop.OpenAsync();
+        await Shop.PlaceOrderWithDoubleClickAsync(ordered.LastProduct, quantity);
+    }
+
+    [Then("my orders contain that order exactly once")]
+    public async Task OrderedExactlyOnce()
+    {
+        await Shop.OpenMyOrdersAsync();   // fresh list, loaded after both requests were answered
+        await Assertions.Expect(Shop.MyOrders.Filter(new() { HasText = ordered.LastProduct! })).ToHaveCountAsync(1);
+    }
+
     [When("I order {int} without a product name")]
     public async Task OrderWithoutProduct(int quantity)
     {

@@ -27,3 +27,8 @@ Feature: Placing an order
   Scenario: Order without a product name is rejected
     When I order 1 without a product name
     Then I see the result "Validation error"
+
+  Scenario: An impatient double click places the order only once
+    Given the payment service approves payments
+    When I order 1 of "Book" with a double click
+    Then my orders contain that order exactly once
