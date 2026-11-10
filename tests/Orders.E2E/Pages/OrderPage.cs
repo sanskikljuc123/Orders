@@ -22,11 +22,18 @@ public class OrderPage(IPage page)
         await new KeycloakLoginPage(page).SubmitAsync(user, password);
     }
 
-    public async Task PlaceOrderAsync(string product, int quantity)
+    /// <summary>
+    /// Fills the form, clicks "Place order" and waits until the server has answered, so a step
+    /// that navigates next cannot cancel the request in flight. Returns the HTTP status.
+    /// </summary>
+    public async Task<int> PlaceOrderAsync(string product, int quantity)
     {
         await page.GetByLabel("Product", new() { Exact = true }).FillAsync(product);
         await page.GetByLabel("Quantity", new() { Exact = true }).FillAsync(quantity.ToString());
-        await PlaceOrderButton.ClickAsync();
+        var response = await page.RunAndWaitForResponseAsync(
+            () => PlaceOrderButton.ClickAsync(),
+            r => r.Url.EndsWith("/orders") && r.Request.Method == "POST");
+        return response.Status;
     }
 
     /// <summary>

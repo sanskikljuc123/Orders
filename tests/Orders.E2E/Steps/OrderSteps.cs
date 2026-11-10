@@ -50,7 +50,12 @@ public class OrderSteps(ScenarioBrowser browser, OrderContext ordered)
     public Task UserHasOrdered(string user, string product) => TestEnvironment.PlaceOrderAsAsync(user, product);
 
     [Given("I have ordered {string}")]
-    public Task IHaveOrdered(string product) => OrderProduct(1, product);
+    public async Task IHaveOrdered(string product)
+    {
+        ordered.LastProduct = $"{product} {Guid.NewGuid().ToString("N")[..8]}";
+        await Shop.OpenAsync();
+        Assert.Equal(201, await Shop.PlaceOrderAsync(ordered.LastProduct, 1));   // stored before the next step navigates
+    }
 
     [When("I open my orders")]
     public Task OpenMyOrders() => Shop.OpenMyOrdersAsync();
