@@ -45,6 +45,7 @@ browser), **N** nightly only (`.github/workflows/ci-nightly.yml`).
 | A dependency with a known vulnerability ships | every restore: NuGet audit fails on High/Critical, direct or transitive (`Directory.Build.props`); Dependabot update PRs |
 | Insecure code (weak crypto, disabled validation, injectable SQL) | every build: .NET security analyzers, findings are errors |
 | A container image with a known fixable vulnerability is pushed | `Images` target: Trivy scan before any push (HIGH/CRITICAL with a fix fail; it caught apt in the full base image, now chiseled) |
+| A deployment misses a setting and runs without login, without charging or without a database | I `StartupConfigurationTests` (Production refuses to start, names what is missing; Development still starts) |
 | Production runs with the plain-http dev login settings | I `AuthSecurityOptionsTests.Production_requires_https_and_secure_cookies` |
 | Production realm gets test users, wildcards, plain HTTP or password login | U `ProductionRealmTests`; N `DeploySmoke` (realm in a real cluster: HTTPS-only, no users) |
 | Test realm or generated passwords reach git or a deployment | `.gitignore` (`k8s-artifacts/`); AppHost imports the test realm only outside publish mode (not automated: reviewed) |

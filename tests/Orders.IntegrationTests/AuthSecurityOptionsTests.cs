@@ -13,21 +13,12 @@ using Microsoft.AspNetCore.Authentication;
 /// The relaxed http-only login settings must exist only where appsettings.Development.json turns
 /// them on. Any other environment (e.g. the Kubernetes deployment) gets the secure defaults.
 /// </summary>
-public class AuthSecurityOptionsTests
+[Collection("Stack")]   // Production needs a database (fail-fast), so these use the test PostgreSQL
+public class AuthSecurityOptionsTests(StackFixture fixture)
 {
-    private sealed class ApiInEnvironment(string environment) : WebApplicationFactory<Program>
+    private (OpenIdConnectOptions Oidc, JwtBearerOptions Jwt, CookieAuthenticationOptions Cookie) OptionsIn(string environment)
     {
-        protected override void ConfigureWebHost(IWebHostBuilder builder)
-        {
-            builder.UseEnvironment(environment);
-            // Options are only read, never used, so the authority is never contacted.
-            builder.UseSetting("Auth:Authority", "https://keycloak.invalid/realms/orders");
-        }
-    }
-
-    private static (OpenIdConnectOptions Oidc, JwtBearerOptions Jwt, CookieAuthenticationOptions Cookie) OptionsIn(string environment)
-    {
-        using var api = new ApiInEnvironment(environment);
+        using var api = new ApiInEnvironment(environment, fixture.DbConnectionString);
         var services = api.Services;
         return (
             services.GetRequiredService<IOptionsMonitor<OpenIdConnectOptions>>().Get("oidc"),
@@ -79,7 +70,7 @@ public class AuthSecurityOptionsTests
     [Fact]
     public async Task Login_cookie_sessions_live_on_the_server_so_logout_can_revoke_them()
     {
-        using var api = new ApiInEnvironment("Production");
+        using var api = new ApiInEnvironment("Production", fixture.DbConnectionString);
         var cookie = api.Services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
             .Get(CookieAuthenticationDefaults.AuthenticationScheme);
 

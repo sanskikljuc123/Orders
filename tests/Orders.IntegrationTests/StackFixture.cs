@@ -26,6 +26,9 @@ public class StackFixture : OrdersApiFactory, IAsyncLifetime
 
     protected override IReadOnlyDictionary<string, string> Settings => _settings;
 
+    /// <summary>The test PostgreSQL, for factories that start the API in another environment.</summary>
+    public string DbConnectionString => _db.GetConnectionString();
+
     /// <summary>Token endpoint and API Authority use the same URL, so the issuer matches.</summary>
     public string Authority => $"{_keycloak.GetBaseAddress().TrimEnd('/')}/realms/orders";
 

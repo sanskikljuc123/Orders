@@ -27,6 +27,20 @@ builder.Services.AddOpenApi();   // the API contract; snapshot in docs/api/opena
 builder.Services.AddSingleton(TimeProvider.System);   // replaced with a fixed clock in tests
 builder.Services.AddHealthChecks();
 
+// Fail fast outside Development. Without these settings the API would quietly fall back to its
+// local/test defaults: no login at all, every order "Paid" without a charge, orders kept only in
+// memory (lost on restart). Development keeps the defaults for local runs and tests.
+if (!builder.Environment.IsDevelopment())
+{
+    var missing = new[] { "Auth:Authority", "Payment:BaseUrl", "ConnectionStrings:ordersdb" }
+        .Where(key => string.IsNullOrWhiteSpace(builder.Configuration[key]))
+        .ToArray();
+    if (missing.Length > 0)
+        throw new InvalidOperationException(
+            $"Missing required settings in environment '{builder.Environment.EnvironmentName}': {string.Join(", ", missing)}. "
+            + "Outside Development the API refuses to start without login, payment provider and database.");
+}
+
 var paymentUrl = builder.Configuration["Payment:BaseUrl"];
 if (!string.IsNullOrEmpty(paymentUrl))
     builder.Services.AddHttpClient<IPaymentClient, HttpPaymentClient>(c =>

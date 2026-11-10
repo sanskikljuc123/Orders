@@ -62,19 +62,10 @@ public class OpenApiContractTests(StackFixture fixture)
         Assert.Equal(["createdAt", "id", "productName", "quantity", "status"], order);
     }
 
-    private sealed class ApiInProduction : WebApplicationFactory<Program>
-    {
-        protected override void ConfigureWebHost(IWebHostBuilder builder)
-        {
-            builder.UseEnvironment("Production");
-            builder.UseSetting("Auth:Authority", "https://keycloak.invalid/realms/orders");
-        }
-    }
-
     [Fact]
     public async Task Production_does_not_publish_the_document()
     {
-        using var api = new ApiInProduction();
+        using var api = new ApiInEnvironment("Production", fixture.DbConnectionString);
 
         var res = await api.CreateClient().GetAsync("/openapi/v1.json");
 
