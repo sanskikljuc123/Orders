@@ -73,7 +73,7 @@ row filled in; an empty cell is a gap, "n/a" a decision.
 | Chart installed without passwords (Keycloak exits, realm Job times out) | `Helm` target: the chart must refuse to render without them (`required-secrets.yaml`) |
 | Chart valid but the system does not start (e.g. Keycloak without TLS settings) | N `DeploySmoke` (kind install, hook Job, API /health) |
 | Images not built or not pushed | `Images` target on every pull request; push on main |
-| Tests pass only in one order or are flaky | random order on every run; N `Stability` (each project 3 times) |
+| Tests pass only in one order or are flaky | random order on every run, E2E included; N `Stability` (each project 3 times, a new order each time) |
 | Tests pass but would not catch a bug | N `Mutation` (Stryker; break thresholds in `stryker/*.json`) |
 | Coverage quietly drops on critical code | `CoverageGate` (merged report, per-class floors) on every pull request |
 

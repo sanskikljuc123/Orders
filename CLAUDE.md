@@ -126,7 +126,8 @@ Run the app and the manual smoke check: [`README.md`](README.md).
   `.\build.cmd --target UnitTests ContractTests` on Windows (job `windows`).
 - API contract changed on purpose: `UPDATE_OPENAPI_SNAPSHOT=1 dotnet test tests/Orders.IntegrationTests
   --filter FullyQualifiedName~OpenApiContractTests`, review and commit `docs/api/openapi.v1.json`.
-- Test order is random (unit, contract, integration; `tests/TestSupport/RandomTestOrder.cs`). The
+- Test order is random in all four projects (`tests/TestSupport/RandomTestOrder.cs`; E2E scenarios
+  still run one at a time, see `tests/Orders.E2E/AssemblyInfo.cs`). The
   seed is printed ("Random test order seed: N"); replay a failing order with `TEST_ORDER_SEED=N`.
 
 **Quality gates**
