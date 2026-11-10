@@ -122,7 +122,8 @@ Run the app and the manual smoke check: [`README.md`](README.md).
 - E2E: `dotnet test tests/Orders.E2E` (Docker + Playwright browser:
   `pwsh tests/Orders.E2E/bin/Debug/net10.0/playwright.ps1 install`); `--filter Category=smoke` for smoke only
 - `dotnet test` alone runs all four, so it needs Docker and the browser too.
-- Everything CI runs on a pull request: `./build.sh --target Test Helm Images`.
+- Everything CI runs on a pull request: `./build.sh --target Test Helm Images` (Linux), plus
+  `.\build.cmd --target UnitTests ContractTests` on Windows (job `windows`).
 - API contract changed on purpose: `UPDATE_OPENAPI_SNAPSHOT=1 dotnet test tests/Orders.IntegrationTests
   --filter FullyQualifiedName~OpenApiContractTests`, review and commit `docs/api/openapi.v1.json`.
 - Test order is random (unit, contract, integration; `tests/TestSupport/RandomTestOrder.cs`). The

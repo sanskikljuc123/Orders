@@ -48,3 +48,28 @@ jobs:
           name: playwright-artifacts
           path: tests/Orders.E2E/bin/Debug/net10.0/playwright-artifacts
           if-no-files-found: ignore
+
+  # The same entry point Windows developers use (build.cmd): catches Windows-only problems (paths,
+  # line endings, locked files) that the Linux job cannot. Unit + contract tests need no Docker.
+  windows:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # GitVersion needs the full history
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Unit and contract tests (Windows)
+        run: .\build.cmd --target UnitTests ContractTests
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-windows
+          path: TestResults
