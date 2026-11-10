@@ -24,7 +24,12 @@ builder.Services.AddHealthChecks();
 
 var paymentUrl = builder.Configuration["Payment:BaseUrl"];
 if (!string.IsNullOrEmpty(paymentUrl))
-    builder.Services.AddHttpClient<IPaymentClient, HttpPaymentClient>(c => c.BaseAddress = new Uri(paymentUrl));
+    builder.Services.AddHttpClient<IPaymentClient, HttpPaymentClient>(c =>
+    {
+        c.BaseAddress = new Uri(paymentUrl);
+        // The default (100 s) would hold the order request open for a slow provider.
+        c.Timeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("Payment:TimeoutSeconds", 10));
+    });
 else
     builder.Services.AddSingleton<IPaymentClient, AlwaysApprovedPaymentClient>();
 
@@ -224,25 +229,10 @@ public static class UserIds
         ?? "anonymous";
 }
 
-public interface IPaymentClient { Task<bool> ChargeAsync(decimal amount); }
-
 public class AlwaysApprovedPaymentClient : IPaymentClient
 {
     public Task<bool> ChargeAsync(decimal amount) => Task.FromResult(true);
 }
-
-public class HttpPaymentClient(HttpClient http) : IPaymentClient
-{
-    public async Task<bool> ChargeAsync(decimal amount)
-    {
-        var res = await http.PostAsJsonAsync("/charge", new { amount });
-        if (!res.IsSuccessStatusCode) return false;
-        var body = await res.Content.ReadFromJsonAsync<ChargeResponse>();
-        return body?.Approved ?? false;
-    }
-}
-
-public record ChargeResponse(bool Approved);
 
 // Lets WebApplicationFactory<Program> in tests/Orders.IntegrationTests reach the top-level Program.
 public partial class Program { }

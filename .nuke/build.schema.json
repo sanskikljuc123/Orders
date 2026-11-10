@@ -26,6 +26,7 @@
       "enum": [
         "Compile",
         "ComputeVersion",
+        "ContractTests",
         "CoverageGate",
         "E2ETests",
         "Helm",

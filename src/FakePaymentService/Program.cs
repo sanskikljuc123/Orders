@@ -13,6 +13,8 @@ app.MapPost("/__admin/reset", () => { mode = "approve"; return Results.Ok(); });
 app.MapGet("/", () => $"FakePaymentService, mode: {mode}");
 app.Run();
 
-record ChargeRequest(decimal Amount);
-record ChargeResponse(bool Approved);
+// ChargeRequest / ChargeResponse come from Orders.Shared (the same types the API's client uses).
 record ModeRequest(string Mode);
+
+// Lets WebApplicationFactory<Program> in tests/Orders.ContractTests start the fake in-process.
+public partial class Program { }

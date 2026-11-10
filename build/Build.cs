@@ -77,6 +77,10 @@ class Build : NukeBuild
         .DependsOn(Compile)
         .Executes(() => RunTests("Orders.UnitTests", coverage: true));
 
+    Target ContractTests => _ => _
+        .DependsOn(Compile)
+        .Executes(() => RunTests("Orders.ContractTests", coverage: true));
+
     Target IntegrationTests => _ => _
         .DependsOn(Compile)
         .Executes(() => RunTests("Orders.IntegrationTests", coverage: true));
@@ -167,7 +171,7 @@ class Build : NukeBuild
         });
 
     Target Test => _ => _
-        .DependsOn(UnitTests, IntegrationTests, CoverageGate, E2ETests);
+        .DependsOn(UnitTests, ContractTests, IntegrationTests, CoverageGate, E2ETests);
 
     void RunTests(string project, bool coverage)
     {

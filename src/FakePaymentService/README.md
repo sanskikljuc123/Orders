@@ -13,6 +13,17 @@ The contract below is assumed from `HttpPaymentClient` in `src/Orders.Api/Progra
 
 Replace this assumption with the provider's spec or recorded responses before relying on it.
 
+## Shared contract and contract tests
+
+`ChargeRequest` / `ChargeResponse` and the real client `HttpPaymentClient` live in
+`src/Orders.Shared/Payments.cs`, used by both the API and this fake. `tests/Orders.ContractTests`
+runs the real client against this fake in-process, so a change to the route, body or the meaning
+of a mode fails there first. This proves the client and the fake agree; it does not prove the
+real provider behaves this way (the assumption above still stands).
+
+The client treats anything but a clear approval (HTTP error, unreadable body, unreachable,
+timeout after `Payment:TimeoutSeconds`, default 10) as not paid.
+
 ## Test-only control endpoints
 
 | Endpoint | Body | Effect |
