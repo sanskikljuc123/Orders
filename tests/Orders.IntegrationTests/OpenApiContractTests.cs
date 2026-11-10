@@ -58,6 +58,8 @@ public class OpenApiContractTests(StackFixture fixture)
         Assert.NotNull(post["400"]);
         Assert.NotNull(post["401"]);
         Assert.NotNull(post["422"]);
+        Assert.NotNull(post["202"]);   // Pending: retry with the same key settles it
+        Assert.NotNull(post["503"]);   // not placed, nothing charged
         var order = doc["components"]!["schemas"]!["Order"]!["properties"]!.AsObject().Select(p => p.Key).Order();
         Assert.Equal(["createdAt", "id", "productName", "quantity", "status"], order);
     }

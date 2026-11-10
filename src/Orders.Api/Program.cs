@@ -192,7 +192,8 @@ orders.MapPost("", async (
     HttpContext http,
     [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
     [FromServices] IValidator<CreateOrderRequest> validator,
-    [FromServices] OrderService orderService) =>
+    [FromServices] OrderService orderService,
+    [FromServices] ILogger<OrderService> log) =>
 {
     var result = await validator.ValidateAsync(req);
     if (!result.IsValid)
@@ -204,7 +205,19 @@ orders.MapPost("", async (
             ["Idempotency-Key"] = ["'Idempotency-Key' must be 1 to 100 characters."]
         });
 
-    var placed = await orderService.PlaceOrderAsync(req, UserIds.Get(user), idempotencyKey);
+    PlacedOrder placed;
+    try
+    {
+        placed = await orderService.PlaceOrderAsync(req, UserIds.Get(user), idempotencyKey);
+    }
+    catch (Exception e)
+    {
+        // Only possible before the charge (reserving the order failed): every failure after the
+        // charge is handled in OrderService and leaves the order Pending.
+        log.LogError(e, "Order not placed: could not reserve it; nothing charged");
+        return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "Order not placed",
+            detail: "Nothing was charged. Try again with the same Idempotency-Key.");
+    }
     if (placed.Outcome == PlaceOutcome.KeyUsedForDifferentOrder)   // 422 as in the IETF Idempotency-Key draft
         return Results.ValidationProblem(new Dictionary<string, string[]>
         {
@@ -212,9 +225,13 @@ orders.MapPost("", async (
         }, statusCode: StatusCodes.Status422UnprocessableEntity);
     if (placed.Replayed)
         http.Response.Headers["Idempotent-Replayed"] = "true";   // same order, not charged again
+    if (placed.Outcome == PlaceOutcome.Pending)   // charged (or attempted), result not saved yet
+        return Results.Accepted($"/orders/{placed.Order.Id}", placed.Order);
     return Results.Created($"/orders/{placed.Order.Id}", placed.Order);
 })
     .Produces<Order>(StatusCodes.Status201Created)
+    .Produces<Order>(StatusCodes.Status202Accepted)                         // Pending: retry with the same key settles it
+    .ProducesProblem(StatusCodes.Status503ServiceUnavailable)              // not placed, nothing charged
     .ProducesValidationProblem()                                            // field errors, bad Idempotency-Key
     .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity)    // key used for another order
     .Produces(StatusCodes.Status401Unauthorized)
@@ -234,10 +251,13 @@ orders.MapGet("/{id:guid}", async (
     [FromServices] IFusionCache cache) =>
 {
     var userId = UserIds.Get(user);
+    var key = $"order:{userId}:{id}";
     var order = await cache.GetOrSetAsync<Order?>(
-        $"order:{userId}:{id}",
+        key,
         (ctx, ct) => repo.FindAsync(id, userId),
         options: new FusionCacheEntryOptions(TimeSpan.FromSeconds(30)));
+    if (order?.Status == OrderStatus.Pending)
+        await cache.RemoveAsync(key);   // only final states are cached: the next read sees Paid/PaymentFailed
     return order is null ? Results.NotFound() : Results.Ok(order);
 })
     .Produces<Order>()
@@ -254,6 +274,7 @@ public record Order(
     Guid Id,
     string ProductName,
     int Quantity,
+    [property: System.ComponentModel.Description("Pending (charge in progress or its result not saved yet; retry with the same Idempotency-Key), Paid or PaymentFailed.")]
     string Status,
     [property: System.Text.Json.Serialization.JsonIgnore] string UserId,   // internal (Keycloak sub): stored, never sent
     DateTimeOffset CreatedAt,

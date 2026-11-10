@@ -26,6 +26,14 @@ public class StackFixture : OrdersApiFactory, IAsyncLifetime
 
     protected override IReadOnlyDictionary<string, string> Settings => _settings;
 
+    /// <summary>The token's "sub" claim: the user id the API locks and stores orders under.</summary>
+    public static string SubjectOf(HttpClient client)
+    {
+        var payload = client.DefaultRequestHeaders.Authorization!.Parameter!.Split('.')[1].Replace('-', '+').Replace('_', '/');
+        var json = Convert.FromBase64String(payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '='));
+        return System.Text.Json.JsonDocument.Parse(json).RootElement.GetProperty("sub").GetString()!;
+    }
+
     /// <summary>The test PostgreSQL, for factories that start the API in another environment.</summary>
     public string DbConnectionString => _db.GetConnectionString();
 

@@ -74,7 +74,7 @@ public class IdempotencyTests
         var charging = new TaskCompletionSource();
         A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._, A<Guid>._)).ReturnsLazily(async () => { await charging.Task; return true; });
         var locks = _fixture.Services.GetRequiredService<IdempotencyLocks>();
-        var lockKey = $"{SubjectOf(ana)}\n{key}";
+        var lockKey = $"{StackFixture.SubjectOf(ana)}\n{key}";
 
         var requests = Enumerable.Range(0, 3).Select(_ => ana.SendAsync(Post(new CreateOrderRequest(product, 1), key))).ToList();
         // All three hold or wait for the same lock before the charge is released (no fixed sleep).
@@ -88,14 +88,6 @@ public class IdempotencyTests
         Assert.Single(ids.Distinct());
         Assert.Equal(1, await RowsWithProductAsync(product));
         Assert.True(allQueued, "all three requests should have waited on the same shared lock");
-    }
-
-    /// <summary>The token's "sub" claim: the user id the API locks and stores orders under.</summary>
-    private static string SubjectOf(HttpClient client)
-    {
-        var payload = client.DefaultRequestHeaders.Authorization!.Parameter!.Split('.')[1].Replace('-', '+').Replace('_', '/');
-        var json = Convert.FromBase64String(payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '='));
-        return System.Text.Json.JsonDocument.Parse(json).RootElement.GetProperty("sub").GetString()!;
     }
 
     [Fact]
