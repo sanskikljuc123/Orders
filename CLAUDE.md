@@ -47,6 +47,19 @@ GitVersion | NUKE | Stryker.NET | Helm + Kubernetes (via `aspire publish` + `hel
 - Testcontainers = single-service integration tests. Aspire = whole-system E2E and local dev.
 - Writing or setting up tests: use the `test-setup` skill (`.claude/skills/test-setup/`).
 
+## QA agents (`.claude/agents/`, one responsibility each; they report, never edit)
+- `requirement-analysis`: requirement -> business rules, validations, security, permissions,
+  integration points, negative and boundary cases, risks (HIGH/MEDIUM/LOW), a lean test plan
+  (API before UI), open questions. Read-only.
+- `coverage-review`: "would a regression make a test fail?" -> uncovered requirements, missing
+  scenarios, weak, redundant and flaky tests, automation opportunities, regression suites. May run
+  tests and coverage; proposes mutation checks instead of changing code.
+- `failure-analysis`: failed run/log/test -> classification (product bug, test bug, flaky,
+  environment, dependency), root cause with evidence, reproduction, bug report (title, environment,
+  steps, expected, actual, severity, risk, investigation area). May run tests and read CI logs.
+- Shared rules: risk judged by user > business > security > technical complexity; no unnecessary
+  tests; explain reasoning; do not invent. Writing the tests they propose: `test-setup` skill.
+
 ## Gherkin / Playwright conventions
 - Features in `tests/Orders.E2E/Features`, steps in `Steps`, page objects in `Pages`, hooks in `Hooks`.
 - Steps describe behaviour, not clicks. Selectors live ONLY in page objects.
