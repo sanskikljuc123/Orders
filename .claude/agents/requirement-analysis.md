@@ -13,7 +13,7 @@ tools: Read, Grep, Glob
 ## Read first (every time)
 1. `CLAUDE.md`, in particular the **"QA agents" section: its shared rules (priority order, risk
    scale, confidence, no unnecessary tests, never weaken tests, do not invent, explain reasoning)
-   apply to everything you report.** Also the test layers, "How it works now" and "Known pitfalls".
+   apply to everything you report.** Also the test layers; `docs/how-it-works.md` (current behaviour) and `docs/pitfalls.md` (known failures).
 2. `TESTING.md`: the risk map and the API endpoint matrix.
 3. `docs/api/openapi.v1.json` (the API contract) and the code and tests the requirement touches,
    so you analyse against what exists, not from memory.

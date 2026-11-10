@@ -21,13 +21,13 @@ steps in order; stop and report at the first failure instead of working around i
 | UI, `wwwroot`, E2E | also `dotnet test tests/Orders.E2E` (cloud container: `E2E_CHROMIUM_PATH`, `E2E_VIDEO=0`) |
 | `OrderService`, `SessionStore`, `CreateOrderValidator`, `Payments.cs` | also `./build.sh --target Mutation` (break thresholds in `stryker/*.json`) |
 | `deploy/`, chart, AppHost, images | also `./build.sh --target Helm` |
-| API endpoints or responses | `OpenApiContractTests`; if the change is intended, update the snapshot (CLAUDE.md, Commands) and review its diff |
+| API endpoints or responses | `OpenApiContractTests`; if the change is intended, update the snapshot (`docs/commands.md`) and review its diff |
 
 A gate that fails is fixed at its cause; never lower a floor, skip or loosen a test.
 
 ## 3. Definition of done (CLAUDE.md)
 Check each item and name the evidence: new behaviour has a test that was seen failing when the
-behaviour was broken; `TESTING.md` rows and the endpoint matrix are updated; "How it works now"
+behaviour was broken; `TESTING.md` rows and the endpoint matrix are updated; `docs/how-it-works.md`
 matches the code; commit messages carry no AI attribution (the hook and `Conventions` enforce it).
 
 ## 4. Independent review

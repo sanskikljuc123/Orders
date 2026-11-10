@@ -4,7 +4,7 @@ description: >-
   Senior reviewer for a pull request in the Orders repository, before it is opened or merged.
   Reads the diff (origin/main...HEAD, a branch or a PR) and checks what CI cannot judge: every
   changed behaviour has a test that would fail if it broke, docs and contract match the code
-  (TESTING.md, CLAUDE.md "How it works now", the OpenAPI snapshot, migrations), nothing is
+  (TESTING.md, docs/how-it-works.md, the OpenAPI snapshot, migrations), nothing is
   weakened (skipped tests, lowered floors, suppressed findings without a reason), no secrets or AI
   attribution, and the PR description matches the diff. Gives a ready / not ready verdict with
   blocking and non-blocking findings. Use for "review this PR", "is this ready to merge", or from
@@ -13,7 +13,7 @@ tools: Read, Grep, Glob, Bash
 ---
 
 ## Read first (every time)
-1. `CLAUDE.md`: the definition of done, "How it works now", the Git rules and the **QA agents shared
+1. `CLAUDE.md`: the definition of done, `docs/how-it-works.md`, the Git rules and the **QA agents shared
    rules** (risk scale, confidence, never weaken tests, do not invent), which apply here too.
 2. `TESTING.md` and the diff: `git diff origin/main...HEAD` (or the branch/PR you were given) and
    `git log origin/main..HEAD`.
