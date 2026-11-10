@@ -177,6 +177,11 @@ orders.MapPost("", async (
         });
 
     var placed = await orderService.PlaceOrderAsync(req, UserIds.Get(user), idempotencyKey);
+    if (placed.Outcome == PlaceOutcome.KeyUsedForDifferentOrder)   // 422 as in the IETF Idempotency-Key draft
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["Idempotency-Key"] = ["'Idempotency-Key' was already used for a different order."]
+        }, statusCode: StatusCodes.Status422UnprocessableEntity);
     if (placed.Replayed)
         http.Response.Headers["Idempotent-Replayed"] = "true";   // same order, not charged again
     return Results.Created($"/orders/{placed.Order.Id}", placed.Order);
@@ -210,7 +215,7 @@ public record Order(
     string ProductName,
     int Quantity,
     string Status,
-    string UserId = "anonymous",
+    [property: System.Text.Json.Serialization.JsonIgnore] string UserId = "anonymous",   // internal (Keycloak sub): stored, never sent
     DateTimeOffset CreatedAt = default,
     [property: System.Text.Json.Serialization.JsonIgnore] string? IdempotencyKey = null);
 

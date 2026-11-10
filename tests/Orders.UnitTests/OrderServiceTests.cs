@@ -90,6 +90,26 @@ public class OrderServiceTests
         Assert.Single(await _store.ListAsync("ana"));
     }
 
+    [Theory]
+    [InlineData("Pen", 2)]    // other product
+    [InlineData("Book", 3)]   // other quantity
+    [InlineData("book", 2)]   // product names are compared exactly
+    public async Task Reusing_a_key_for_a_different_order_is_rejected_without_charging(string product, int quantity)
+    {
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).Returns(true);
+        var sut = CreateSut();
+        var first = await sut.PlaceOrderAsync(new CreateOrderRequest("Book", 2), "ana", "key-1");
+
+        var reused = await sut.PlaceOrderAsync(new CreateOrderRequest(product, quantity), "ana", "key-1");
+
+        Assert.Equal(PlaceOutcome.Created, first.Outcome);
+        Assert.Equal(PlaceOutcome.KeyUsedForDifferentOrder, reused.Outcome);
+        Assert.False(reused.Replayed);
+        Assert.Equal(first.Order.Id, reused.Order.Id);   // the order the key belongs to
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).MustHaveHappenedOnceExactly();
+        Assert.Single(await _store.ListAsync("ana"));
+    }
+
     [Fact]
     public async Task Different_keys_are_different_orders()
     {

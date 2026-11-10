@@ -13,7 +13,7 @@ For each endpoint that matters, cover what a caller depends on:
 | Validation | Each rule rejects with the specific field and message; boundaries (min-1, min, max, max+1), empty, null, unicode, oversized |
 | Broken input | Cut-off or empty JSON, wrong JSON types, wrong content type (415), route values of the wrong type (`/orders/not-a-guid` → 404): never a 500, never a side effect |
 | Pagination | First/last page, page size limits, stable ordering, `next` link/cursor, empty result |
-| Idempotency | Repeating a PUT/DELETE, or a POST with the same idempotency key, has no extra side effect (e.g. one charge, one record) |
+| Idempotency | Repeating a PUT/DELETE, or a POST with the same idempotency key, has no extra side effect (e.g. one charge, one record); the same key with a *different* body is rejected (422 in the IETF Idempotency-Key draft), never answered with the old result |
 | Side effects | The DB row / message / email actually exists, read back through a separate path |
 | Failure of dependencies | Downstream 500/timeout → the API's documented behaviour, not a 500 with a stack trace |
 | Headers | `Location` on 201, content type, caching/CORS where relevant |

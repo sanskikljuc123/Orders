@@ -1,23 +1,40 @@
-public record PlacedOrder(Order Order, bool Replayed);
+public enum PlaceOutcome
+{
+    Created,
+    /// <summary>Same key, same order: the first order, not charged again.</summary>
+    Replayed,
+    /// <summary>Same key, different product or quantity: rejected, nothing charged or stored.</summary>
+    KeyUsedForDifferentOrder,
+}
+
+/// <summary>Order is the new order, or for a reused key the order that key already belongs to.</summary>
+public record PlacedOrder(Order Order, PlaceOutcome Outcome)
+{
+    public bool Replayed => Outcome == PlaceOutcome.Replayed;
+}
 
 public class OrderService(IPaymentClient payment, IOrderRepository orders, TimeProvider clock, IdempotencyLocks locks)
 {
     /// <summary>
     /// Places an order and charges for it. With an idempotency key, repeating the request (double
     /// click, client retry) returns the first order instead of charging again; concurrent requests
-    /// with the same key are serialized so only one of them charges.
+    /// with the same key are serialized so only one of them charges. Reusing a key for a different
+    /// product or quantity is rejected instead of silently returning the first order.
     /// </summary>
     public async Task<PlacedOrder> PlaceOrderAsync(CreateOrderRequest req, string userId = "anonymous", string? idempotencyKey = null)
     {
         if (idempotencyKey is null)
-            return new PlacedOrder(await ChargeAndStoreAsync(req, userId, null), Replayed: false);
+            return new PlacedOrder(await ChargeAndStoreAsync(req, userId, null), PlaceOutcome.Created);
 
         using var _ = await locks.AcquireAsync($"{userId}\n{idempotencyKey}");
         var existing = await orders.FindByIdempotencyKeyAsync(userId, idempotencyKey);
         if (existing is not null)
-            return new PlacedOrder(existing, Replayed: true);
+            return new PlacedOrder(existing,
+                existing.ProductName == req.ProductName && existing.Quantity == req.Quantity
+                    ? PlaceOutcome.Replayed
+                    : PlaceOutcome.KeyUsedForDifferentOrder);
 
-        return new PlacedOrder(await ChargeAndStoreAsync(req, userId, idempotencyKey), Replayed: false);
+        return new PlacedOrder(await ChargeAndStoreAsync(req, userId, idempotencyKey), PlaceOutcome.Created);
     }
 
     private async Task<Order> ChargeAndStoreAsync(CreateOrderRequest req, string userId, string? idempotencyKey)

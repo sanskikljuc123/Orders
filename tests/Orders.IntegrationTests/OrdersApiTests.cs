@@ -117,12 +117,13 @@ public class OrdersApiTests : IClassFixture<OrdersApiFactory>
     public async Task Order_response_has_exactly_the_fields_callers_read()
     {
         // Renaming, adding or removing a field changes the API for every caller: make it a decision.
+        // userId (Keycloak's internal subject) and the idempotency key are stored but never sent.
         var res = await _client.PostAsJsonAsync("/orders", new CreateOrderRequest($"Book-{Guid.NewGuid():N}", 1));
         var body = await res.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
 
         var fields = body.EnumerateObject().Select(p => p.Name).Order().ToArray();
 
-        Assert.Equal(["createdAt", "id", "productName", "quantity", "status", "userId"], fields);
+        Assert.Equal(["createdAt", "id", "productName", "quantity", "status"], fields);   // no userId: internal
         Assert.Equal("application/json; charset=utf-8", res.Content.Headers.ContentType?.ToString());
     }
 }
