@@ -193,6 +193,9 @@ class Build : NukeBuild
             Assert.True(failures.Count == 0, $"{failures.Count} test(s) failed in at least one run, see TestResults/stability-summary.md");
         });
 
+    static string SmokePassword() =>
+        Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
+
     [Parameter("kind cluster name for DeploySmoke")]
     readonly string SmokeCluster = "orders-smoke";
 
@@ -213,7 +216,29 @@ class Build : NukeBuild
                 foreach (var (_, image) in ContainerImages)
                     kind($"load docker-image {image}:{Version} --name {SmokeCluster}");
 
-                helm($"install orders {ChartDir} -f {values} --set parameters.api.api_image=orders-api:{Version} --set parameters.payment.payment_image=orders-payment:{Version} --wait --timeout 10m");
+                // The chart has no passwords of its own (values.dev.yaml: they come from the cluster
+                // or CI). Without them Keycloak exits ("bootstrap-admin-username available only when
+                // bootstrap admin password is set") and the realm Job waits until the timeout.
+                // Throwaway passwords per run, in a values file so they never reach the command line.
+                var postgresPassword = SmokePassword();
+                var secrets = TemporaryDirectory / "smoke-secrets.yaml";
+                secrets.WriteAllText($"secrets:\n  keycloak:\n    keycloak_password: \"{SmokePassword()}\"\n  postgres:\n    postgres_password: \"{postgresPassword}\"\n  api:\n    postgres_password: \"{postgresPassword}\"\n");
+                try
+                {
+                    helm($"install orders {ChartDir} -f {values} -f {secrets} --set parameters.api.api_image=orders-api:{Version} --set parameters.payment.payment_image=orders-payment:{Version} --wait --timeout 10m");
+                }
+                catch
+                {
+                    // Show why: pod states, the realm Job's output, recent events.
+                    kubectl("get pods -o wide", exitHandler: _ => { });
+                    kubectl("logs job/keycloak-realm-import --tail 50", exitHandler: _ => { });
+                    kubectl("get events --sort-by .lastTimestamp", exitHandler: _ => { });
+                    throw;
+                }
+                finally
+                {
+                    secrets.DeleteFile();
+                }
 
                 // Realm created by the hook Job, with the production settings.
                 var realm = string.Join("\n", kubectl($"exec deploy/keycloak-deployment -- bash -c \"/opt/keycloak/bin/kcadm.sh config credentials --config /tmp/k --server http://localhost:8080 --realm master --user $KC_BOOTSTRAP_ADMIN_USERNAME --password $KC_BOOTSTRAP_ADMIN_PASSWORD && /opt/keycloak/bin/kcadm.sh get realms/orders --config /tmp/k --fields realm,sslRequired && /opt/keycloak/bin/kcadm.sh get users -r orders --config /tmp/k --fields username\"", logOutput: false)
