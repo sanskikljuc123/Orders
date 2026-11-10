@@ -35,6 +35,13 @@ so framework behaviour (a missing `RequireAuthorization`, bad JSON becoming a 50
   column per area above. An empty cell is a visible gap; "n/a" is a decision.
 - **Lock the response shape**: assert the exact set of field names, so adding, renaming or
   removing a field is a reviewed decision.
+- **Snapshot the whole contract**: with `Microsoft.AspNetCore.OpenApi` (`AddOpenApi`, `MapOpenApi`
+  in Development only), declare each endpoint's responses with `.Produces(...)`, commit the document
+  and fail a test when the served one differs (normalized JSON, an opt-in env variable to accept a
+  change). Anchor a few critical entries separately, so an accepted snapshot cannot drop them, and
+  test that production does not publish it. Exclude browser redirects (`/login`) from the
+  description. Records in responses: no `= default` constructor parameters, the schema generator
+  fails on them. The document is also the input for fuzzers such as Schemathesis.
 - **Expired tokens**: JwtBearer's lifetime check uses the system clock, not `TimeProvider`, so a
   fake clock does not expire a token. Rather than waiting out a real lifetime plus the 5-minute
   clock skew, guard the options (`ValidateLifetime`, `RequireExpirationTime`,

@@ -21,6 +21,7 @@ builder.Host.ConfigureContainer<ContainerBuilder>(c =>
     c.RegisterType<CreateOrderValidator>().As<IValidator<CreateOrderRequest>>().SingleInstance();
 });
 builder.Services.AddFusionCache();
+builder.Services.AddOpenApi();   // the API contract; snapshot in docs/api/openapi.v1.json
 builder.Services.AddSingleton(TimeProvider.System);   // replaced with a fixed clock in tests
 builder.Services.AddHealthChecks();
 
@@ -131,6 +132,11 @@ if (dbEnabled)
 app.UseSerilogRequestLogging();
 // Anonymous readiness probe (Aspire WithHttpHealthCheck, E2E startup). Reports only "Healthy"/"Unhealthy".
 app.MapHealthChecks("/health");
+
+// The contract document is for development and tests (snapshot test, fuzzing); production does not
+// publish it. Public on purpose in Development (EndpointAuthTests' public list).
+if (app.Environment.IsDevelopment())
+    app.MapOpenApi();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
@@ -140,17 +146,21 @@ if (authEnabled)
     app.UseAuthorization();
 
     app.MapGet("/login", () =>
-        Results.Challenge(new AuthenticationProperties { RedirectUri = "/" }, new[] { "oidc" }));
+        Results.Challenge(new AuthenticationProperties { RedirectUri = "/" }, new[] { "oidc" }))
+        .ExcludeFromDescription();   // browser redirect to Keycloak, not part of the API contract
 
     // Ends both sessions: the app cookie and Keycloak's own (RP-initiated logout via the end-session
     // endpoint, with the saved id_token as hint). Clearing only the cookie left Keycloak signed in,
     // so "Log in" signed the user straight back in without a password.
     app.MapGet("/logout", () =>
         Results.SignOut(new AuthenticationProperties { RedirectUri = "/" },
-            new[] { CookieAuthenticationDefaults.AuthenticationScheme, "oidc" }));
+            new[] { CookieAuthenticationDefaults.AuthenticationScheme, "oidc" }))
+        .ExcludeFromDescription();
 }
 
-var me = app.MapGet("/me", (ClaimsPrincipal user) => Results.Ok(new { name = UserIds.Name(user) }));
+var me = app.MapGet("/me", (ClaimsPrincipal user) => Results.Ok(new Me(UserIds.Name(user))))
+    .Produces<Me>()
+    .Produces(StatusCodes.Status401Unauthorized);
 if (authEnabled)
     me.RequireAuthorization();
 
@@ -185,12 +195,19 @@ orders.MapPost("", async (
     if (placed.Replayed)
         http.Response.Headers["Idempotent-Replayed"] = "true";   // same order, not charged again
     return Results.Created($"/orders/{placed.Order.Id}", placed.Order);
-});
+})
+    .Produces<Order>(StatusCodes.Status201Created)
+    .ProducesValidationProblem()                                            // field errors, bad Idempotency-Key
+    .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity)    // key used for another order
+    .Produces(StatusCodes.Status401Unauthorized)
+    .Produces(StatusCodes.Status415UnsupportedMediaType);
 
 orders.MapGet("", async (
     ClaimsPrincipal user,
     [FromServices] IOrderRepository repo) =>
-    Results.Ok(await repo.ListAsync(UserIds.Get(user))));
+    Results.Ok(await repo.ListAsync(UserIds.Get(user))))
+    .Produces<List<Order>>()
+    .Produces(StatusCodes.Status401Unauthorized);
 
 orders.MapGet("/{id:guid}", async (
     Guid id,
@@ -204,20 +221,26 @@ orders.MapGet("/{id:guid}", async (
         (ctx, ct) => repo.FindAsync(id, userId),
         options: new FusionCacheEntryOptions(TimeSpan.FromSeconds(30)));
     return order is null ? Results.NotFound() : Results.Ok(order);
-});
+})
+    .Produces<Order>()
+    .Produces(StatusCodes.Status404NotFound)
+    .Produces(StatusCodes.Status401Unauthorized);
 
 app.Run();
 
 public record CreateOrderRequest(string ProductName, int Quantity);
+
+public record Me(string Name);
 
 public record Order(
     Guid Id,
     string ProductName,
     int Quantity,
     string Status,
-    [property: System.Text.Json.Serialization.JsonIgnore] string UserId = "anonymous",   // internal (Keycloak sub): stored, never sent
-    DateTimeOffset CreatedAt = default,
-    [property: System.Text.Json.Serialization.JsonIgnore] string? IdempotencyKey = null);
+    [property: System.Text.Json.Serialization.JsonIgnore] string UserId,   // internal (Keycloak sub): stored, never sent
+    DateTimeOffset CreatedAt,
+    [property: System.Text.Json.Serialization.JsonIgnore] string? IdempotencyKey);   // no defaults: the OpenAPI schema
+                                                                                      // generator fails on `= default`
 
 public static class UserIds
 {

@@ -33,6 +33,7 @@ browser), **N** nightly only (`.github/workflows/ci-nightly.yml`).
 
 | Risk | Tests |
 |---|---|
+| API contract changes unnoticed (route, status code, field) | I `OpenApiContractTests` (document equals `docs/api/openapi.v1.json`; key responses and `Order` fields anchored; not published in production) |
 | Internal user ids leak to callers | I `Order_response_has_exactly_the_fields_callers_read` (no `userId`), `Key_is_not_returned_to_the_client` |
 | Anonymous or forged requests accepted (incl. a new endpoint someone forgot to protect) | I `EndpointAuthTests` (every endpoint found in the app, except the public list, returns 401; an order without a token is not charged), `Request_without_token_returns_401`, `Request_with_garbage_token_returns_401` |
 | Expired tokens accepted | I `AuthSecurityOptionsTests.Expired_or_unsigned_tokens_are_rejected_in_every_environment` (guards the settings; JwtBearer enforces them) |
@@ -45,7 +46,8 @@ browser), **N** nightly only (`.github/workflows/ci-nightly.yml`).
 
 ## API endpoints
 
-What each caller depends on, per endpoint (all I unless marked). A new or changed endpoint gets its
+What each caller depends on, per endpoint (all I unless marked). The machine-readable contract is
+[`docs/api/openapi.v1.json`](docs/api/openapi.v1.json); `/login` and `/logout` are browser redirects, not part of it. A new or changed endpoint gets its
 row filled in; an empty cell is a gap, "n/a" a decision.
 
 | Endpoint | No / bad token | Other user's data | Success contract | Invalid / broken input | Not found / empty |
@@ -56,12 +58,14 @@ row filled in; an empty cell is a gap, "n/a" a decision.
 | `GET /me` | 401 | n/a | name (`Me_returns_the_signed_in_users_name`) | n/a | n/a |
 | `GET /health` | public on purpose | n/a | `Healthy`: E2E startup, N `DeploySmoke` | n/a | n/a |
 | `GET /login`, `/logout` | public on purpose | n/a | E `Login.feature`, `Logout.feature` | n/a | n/a |
+| `GET /openapi/v1.json` | public, Development only; 404 in production (`OpenApiContractTests`) | n/a | equals the committed document | n/a | n/a |
 
 ## Delivery
 
 | Risk | Tests |
 |---|---|
 | Chart invalid | `Helm` target (`helm lint`, `helm template`) on every pull request |
+| Chart installed without passwords (Keycloak exits, realm Job times out) | `Helm` target: the chart must refuse to render without them (`required-secrets.yaml`) |
 | Chart valid but the system does not start (e.g. Keycloak without TLS settings) | N `DeploySmoke` (kind install, hook Job, API /health) |
 | Images not built or not pushed | `Images` target on every pull request; push on main |
 | Tests pass only in one order or are flaky | random order on every run; N `Stability` (each project 3 times) |
