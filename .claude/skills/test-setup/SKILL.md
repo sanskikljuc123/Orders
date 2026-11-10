@@ -156,6 +156,8 @@ plainly, give the exact command, and don't report it as passing.
 - [ ] Timeouts and `BaseURL` set once, not sprinkled in tests or steps.
 - [ ] Steps contain no selectors; feature files contain no UI mechanics.
 - [ ] Files are focused; no giant catch-all test class or feature.
+- [ ] The risk map (e.g. `TESTING.md`: risk -> tests per layer) lists the new behaviour, and
+      known gaps are written down instead of hidden.
 
 ## Report back
 
