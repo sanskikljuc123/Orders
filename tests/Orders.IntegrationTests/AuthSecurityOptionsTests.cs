@@ -63,9 +63,8 @@ public class AuthSecurityOptionsTests
     [InlineData("Development")]
     public void Expired_unsigned_or_foreign_tokens_are_rejected_in_every_environment(string environment)
     {
-        // Testing a real expired token would mean waiting out Keycloak's lifetime plus the clock
-        // skew (JwtBearer's lifetime check does not use TimeProvider), so this guards the settings
-        // the library's own checks depend on instead.
+        // The settings in the environments that matter (Production too). That the API really
+        // refuses such tokens is shown with minted tokens in TokenValidationTests.
         var jwt = OptionsIn(environment).Jwt.TokenValidationParameters;
 
         Assert.True(jwt.ValidateLifetime);
