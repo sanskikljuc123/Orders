@@ -143,6 +143,9 @@ Run the app and the manual smoke check: [`README.md`](README.md).
   next to aspire.cli failed only on clean machines: "package contains aspire".)
 - **Stryker** silently exits with code 1 unless break <= low <= high.
 - **Coverage gate dropped** after new code: add the missing test, never lower the floor.
+- **Chart without passwords:** the generated chart's secrets are empty; Keycloak then exits
+  (code 2) and the realm Job times out. Every install must set them (DeploySmoke generates
+  throwaway ones; a real deploy passes them with `--set`, see `deploy/values.dev.yaml`).
 - **First NUKE run** can rewrite `build/_build.csproj`; check `git diff` and revert what you didn't intend.
 
 ## Cloud dev container (limitations)
