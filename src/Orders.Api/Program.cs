@@ -12,7 +12,9 @@ using ZiggyCreatures.Caching.Fusion;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Host.UseSerilog((ctx, lc) => lc.WriteTo.Console());
+// ReadFrom.Services adds sinks registered in DI (tests capture every event to check that no
+// secret is ever logged, see LogSecretsTests).
+builder.Host.UseSerilog((ctx, services, lc) => lc.ReadFrom.Services(services).WriteTo.Console());
 builder.Host.UseServiceProviderFactory(new AutofacServiceProviderFactory());
 builder.Host.ConfigureContainer<ContainerBuilder>(c =>
 {
@@ -73,7 +75,9 @@ if (authEnabled)
         {
             o.Authority = authority;
             o.RequireHttpsMetadata = !allowInsecureHttp;
-            o.TokenValidationParameters.ValidateAudience = false;
+            // Only tokens issued for this API (aud "orders-api", added by the realm's audience mapper
+            // on orders-web). Without it a token for any other client of the realm was accepted.
+            o.Audience = builder.Configuration["Auth:Audience"] ?? "orders-api";
         })
         .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, o =>
         {

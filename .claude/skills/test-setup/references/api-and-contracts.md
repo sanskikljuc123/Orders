@@ -42,10 +42,16 @@ so framework behaviour (a missing `RequireAuthorization`, bad JSON becoming a 50
   test that production does not publish it. Exclude browser redirects (`/login`) from the
   description. Records in responses: no `= default` constructor parameters, the schema generator
   fails on them. The document is also the input for fuzzers such as Schemathesis.
-- **Expired tokens**: JwtBearer's lifetime check uses the system clock, not `TimeProvider`, so a
-  fake clock does not expire a token. Rather than waiting out a real lifetime plus the 5-minute
-  clock skew, guard the options (`ValidateLifetime`, `RequireExpirationTime`,
-  `RequireSignedTokens`, `ClockSkew`) and say that the library enforces them.
+- **Expired, foreign and forged tokens**: mint them in the test, don't wait for real expiry. Let
+  the API trust a test RSA key and issuer (`PostConfigure<JwtBearerOptions>`: a fixed
+  `Configuration` so no metadata is fetched, plus `ValidIssuer` and `IssuerSigningKey`, which a
+  fixed configuration does not pass on), keep every other validation setting the app's, and
+  create one token per defect with `JsonWebTokenHandler`: expired beyond the 5-minute clock skew,
+  no `exp`, other issuer, other audience, other key. Always include a valid token as control: here
+  it first failed, so the 401 tests would have passed for the wrong reason. Mutation check: turning
+  off a check (`ValidateLifetime`, `ValidateIssuer`, `ValidateAudience`, a pass-through
+  `SignatureValidator`) must fail exactly its test. (`ValidateIssuerSigningKey` does not skip the
+  signature check; it only validates the key itself.)
 
 ## Consumer-driven contract tests (Pact)
 

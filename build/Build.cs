@@ -329,27 +329,77 @@ class Build : NukeBuild
             }
         });
 
+    [Parameter("Scan images with Trivy (HIGH/CRITICAL with a fix fail the build). Default: on, where Trivy runs (Linux x64)")]
+    readonly bool ScanImages = OperatingSystem.IsLinux()
+        && System.Runtime.InteropServices.RuntimeInformation.OSArchitecture == System.Runtime.InteropServices.Architecture.X64;
+
     Target Images => _ => _
         .DependsOn(ComputeVersion)
         .Executes(() =>
         {
-            // .NET SDK container support (no Dockerfile). Without --push-images the images go to the
-            // local Docker daemon, which proves they build; with it they are pushed to ghcr.io.
+            // .NET SDK container support (no Dockerfile). The images are always built into the local
+            // Docker daemon and scanned first; only then, with --push-images, are they pushed to
+            // ghcr.io, so an image with a known fixable HIGH/CRITICAL vulnerability is never pushed.
             // Registry login comes from DOTNET_CONTAINER_REGISTRY_UNAME / _PWORD (set by CI).
+            Assert.True(!PushImages || ScanImages, "--push-images needs --scan-images (never push an unscanned image)");
             foreach (var (project, image) in ContainerImages)
             {
-                var repository = PushImages ? $"{ImageOwner}/{image}" : image;
-                var projectDir = RootDirectory / "src" / project;
+                DotNet($"publish {RootDirectory / "src" / project} -c Release -t:PublishContainer -p:ContainerRepository={image} -p:ContainerImageTag={Version}");
+                if (ScanImages)
+                    ScanImage($"{image}:{Version}");
+                else
+                    Serilog.Log.Warning("Image {Image}:{Version} NOT scanned (--scan-images false)", image, Version);
+            }
+
+            if (!PushImages)
+                return;
+            foreach (var (project, image) in ContainerImages)
+            {
                 // Never interpolate a string that contains spaces: NUKE quotes it as ONE argument
                 // (" -p:ContainerRegistry=..." was glued onto the image tag and broke the push).
-                if (PushImages)
-                    DotNet($"publish {projectDir} -c Release -t:PublishContainer -p:ContainerRepository={repository} -p:ContainerImageTag={Version} -p:ContainerRegistry={ImageRegistry}");
-                else
-                    DotNet($"publish {projectDir} -c Release -t:PublishContainer -p:ContainerRepository={repository} -p:ContainerImageTag={Version}");
-                Serilog.Log.Information("Image: {Image}",
-                    PushImages ? $"{ImageRegistry}/{repository}:{Version}" : $"{repository}:{Version} (local)");
+                DotNet($"publish {RootDirectory / "src" / project} -c Release -t:PublishContainer -p:ContainerRepository={ImageOwner}/{image} -p:ContainerImageTag={Version} -p:ContainerRegistry={ImageRegistry}");
+                Serilog.Log.Information("Pushed: {Image}", $"{ImageRegistry}/{ImageOwner}/{image}:{Version}");
             }
         });
+
+    const string TrivyVersion = "0.76.1";   // pinned; the download is checked against the release's checksums
+
+    /// <summary>Trivy from its GitHub release, cached in .tools/ (git-ignored).</summary>
+    AbsolutePath Trivy()
+    {
+        var dir = RootDirectory / ".tools" / $"trivy-{TrivyVersion}";
+        var exe = dir / "trivy";
+        if (exe.FileExists())
+            return exe;
+
+        var release = $"https://github.com/aquasecurity/trivy/releases/download/v{TrivyVersion}";
+        var archive = $"trivy_{TrivyVersion}_Linux-64bit.tar.gz";
+        using var http = new System.Net.Http.HttpClient();
+        var bytes = http.GetByteArrayAsync($"{release}/{archive}").GetAwaiter().GetResult();
+        var expected = http.GetStringAsync($"{release}/trivy_{TrivyVersion}_checksums.txt").GetAwaiter().GetResult()
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            .Single(parts => parts.Length == 2 && parts[1] == archive)[0];
+        var actual = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
+        Assert.True(actual == expected, $"{archive}: sha256 {actual} does not match the release checksum {expected}");
+
+        dir.CreateOrCleanDirectory();
+        using (var gzip = new System.IO.Compression.GZipStream(new System.IO.MemoryStream(bytes), System.IO.Compression.CompressionMode.Decompress))
+            System.Formats.Tar.TarFile.ExtractToDirectory(gzip, dir, overwriteFiles: true);
+        Assert.FileExists(exe);
+        if (!OperatingSystem.IsWindows())   // ScanImages defaults to Linux only; the guard satisfies the analyzer
+            System.IO.File.SetUnixFileMode(exe, System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite | System.IO.UnixFileMode.UserExecute);
+        return exe;
+    }
+
+    void ScanImage(string reference)
+    {
+        // --ignore-unfixed: a vulnerability without a released fix cannot be acted on and would
+        // block every build; it is still listed by a manual `trivy image` run.
+        var trivy = ToolResolver.GetTool(Trivy());
+        trivy($"image --severity HIGH,CRITICAL --ignore-unfixed --no-progress --skip-version-check --exit-code 1 --cache-dir {RootDirectory / ".tools" / "trivy-cache"} {reference}");
+        Serilog.Log.Information("Image {Image}: no fixable HIGH/CRITICAL vulnerabilities", reference);
+    }
 
     Target Test => _ => _
         .DependsOn(UnitTests, ContractTests, IntegrationTests, CoverageGate, E2ETests);

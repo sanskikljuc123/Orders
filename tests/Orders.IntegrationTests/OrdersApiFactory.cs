@@ -13,6 +13,9 @@ public class OrdersApiFactory : WebApplicationFactory<Program>
 {
     public IPaymentClient Payment { get; } = A.Fake<IPaymentClient>();
 
+    /// <summary>Every log event the API writes (all categories, as configured in Program.cs).</summary>
+    public LogCapture Logs { get; } = new();
+
     /// <summary>Settings read by Program.cs before Build(), so they go in via UseSetting.</summary>
     protected virtual IReadOnlyDictionary<string, string> Settings { get; } = new Dictionary<string, string>();
 
@@ -32,6 +35,7 @@ public class OrdersApiFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll<IPaymentClient>();
             services.AddSingleton(Payment);
+            services.AddSingleton<Serilog.Core.ILogEventSink>(Logs);
         });
     }
 }

@@ -27,4 +27,11 @@
     <ProjectReference Include="..\..\src\Orders.AppHost\Orders.AppHost.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Random test order with a printed seed (tests/TestSupport/RandomTestOrder.cs): scenarios
+         and features run in a new order each run, so Stability also varies the E2E order. -->
+    <Compile Include="..\TestSupport\RandomTestOrder.cs" Link="TestSupport\RandomTestOrder.cs" />
+    <Content Include="..\TestSupport\xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

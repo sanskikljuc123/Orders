@@ -505,3 +505,6 @@ coveragereport/
 
 # Stryker.NET reports when run without --output
 StrykerOutput/
+
+# Build tools downloaded by NUKE (e.g. Trivy) and their caches
+.tools/

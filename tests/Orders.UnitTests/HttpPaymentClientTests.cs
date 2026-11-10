@@ -91,22 +91,27 @@ public class HttpPaymentClientTests
 
     // ---------- every unpaid outcome leaves a warning that says why ----------
 
-    // The expected reason text comes first so each test row is named after it.
-    public static TheoryData<string, Func<StubProvider>> FailuresAndReasons => new()
+    // Only the reason text goes into the test data (serializable, so xUnit lists each row as its
+    // own test that can be run and filtered alone); the provider is built inside the test.
+    private static StubProvider ProviderThatFailsWith(string reason) => reason switch
     {
-        { "answered 500", () => Answering(HttpStatusCode.InternalServerError, "") },
-        { "unreadable answer", () => Answering(HttpStatusCode.OK, "not json") },
-        { "unreachable", () => new StubProvider((_, _) => throw new HttpRequestException("refused")) },
-        { "timed out", () => new StubProvider(async (_, ct) => { await Task.Delay(Timeout.Infinite, ct); return null!; }) },
+        "answered 500" => Answering(HttpStatusCode.InternalServerError, ""),
+        "unreadable answer" => Answering(HttpStatusCode.OK, "not json"),
+        "unreachable" => new StubProvider((_, _) => throw new HttpRequestException("refused")),
+        "timed out" => new StubProvider(async (_, ct) => { await Task.Delay(Timeout.Infinite, ct); return null!; }),
+        _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, "no provider for this reason"),
     };
 
     [Theory]
-    [MemberData(nameof(FailuresAndReasons))]
-    public async Task Unpaid_outcome_is_logged_as_a_warning_with_its_reason(string reason, Func<StubProvider> provider)
+    [InlineData("answered 500")]
+    [InlineData("unreadable answer")]
+    [InlineData("unreachable")]
+    [InlineData("timed out")]
+    public async Task Unpaid_outcome_is_logged_as_a_warning_with_its_reason(string reason)
     {
         var log = new RecordingLogger();
 
-        await Client(provider(), TimeSpan.FromMilliseconds(200), log).ChargeAsync(10m);
+        await Client(ProviderThatFailsWith(reason), TimeSpan.FromMilliseconds(200), log).ChargeAsync(10m);
 
         var entry = Assert.Single(log.Entries);
         Assert.Equal(LogLevel.Warning, entry.Level);

@@ -17,7 +17,21 @@
       ],
       "attributes": {
         "post.logout.redirect.uris": "+"
-      }
+      },
+      "protocolMappers": [
+        {
+          "name": "orders-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "orders-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
     }
   ],
   "users": [
