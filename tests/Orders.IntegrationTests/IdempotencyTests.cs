@@ -115,9 +115,14 @@ public class IdempotencyTests
     {
         var ana = await _fixture.CreateClientAsAsync("ana");
 
-        var res = await ana.SendAsync(Post(new CreateOrderRequest("Book", 1), Guid.NewGuid().ToString()));
+        var key = $"secret-{Guid.NewGuid():N}";
 
-        Assert.DoesNotContain("idempotency", (await res.Content.ReadAsStringAsync()).ToLowerInvariant());
+        var res = await ana.SendAsync(Post(new CreateOrderRequest("Book", 1), key));
+        var body = await res.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.Created, res.StatusCode);   // a real order, not an error page
+        Assert.DoesNotContain(key, body);                        // the value, under any field name
+        Assert.DoesNotContain("idempotency", body.ToLowerInvariant());
     }
 
     [Theory]
@@ -130,7 +135,9 @@ public class IdempotencyTests
         var res = await ana.SendAsync(Post(new CreateOrderRequest("Book", 1), key));
 
         Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
-        Assert.Contains("'Idempotency-Key' must be 1 to 100 characters.", await res.Content.ReadAsStringAsync());
+        var problem = await res.Content.ReadFromJsonAsync<Microsoft.AspNetCore.Http.HttpValidationProblemDetails>();
+        Assert.Equal(["'Idempotency-Key' must be 1 to 100 characters."], problem!.Errors["Idempotency-Key"]);
+        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._)).MustNotHaveHappened();
     }
 
     [Fact]

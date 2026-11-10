@@ -68,14 +68,15 @@ public class AuthApiTests
         var bob = await _fixture.CreateClientAsAsync("bob");
         var anas = $"Anas order {Guid.NewGuid():N}";
         var bobs = $"Bobs secret order {Guid.NewGuid():N}";
-        await ana.PostAsJsonAsync("/orders", new CreateOrderRequest(anas, 1));
-        await bob.PostAsJsonAsync("/orders", new CreateOrderRequest(bobs, 1));
+        Assert.Equal(HttpStatusCode.Created, (await ana.PostAsJsonAsync("/orders", new CreateOrderRequest(anas, 1))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await bob.PostAsJsonAsync("/orders", new CreateOrderRequest(bobs, 1))).StatusCode);
 
-        var anasList = await ana.GetFromJsonAsync<List<Order>>("/orders");
+        var anasNames = (await ana.GetFromJsonAsync<List<Order>>("/orders"))!.Select(o => o.ProductName).ToList();
+        var bobsNames = (await bob.GetFromJsonAsync<List<Order>>("/orders"))!.Select(o => o.ProductName).ToList();
 
-        var names = anasList!.Select(o => o.ProductName).ToList();
-        Assert.Contains(anas, names);
-        Assert.DoesNotContain(bobs, names);
+        Assert.Contains(anas, anasNames);
+        Assert.Contains(bobs, bobsNames);         // Bob's order exists, so its absence below means something
+        Assert.DoesNotContain(bobs, anasNames);
     }
 
     [Fact]
