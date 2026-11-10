@@ -30,3 +30,23 @@ jobs:
         with:
           name: nightly-results
           path: TestResults
+
+  deployment-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - uses: azure/setup-helm@v5
+        with:
+          version: v3.22.1
+
+      # Installs the generated chart in a throwaway kind cluster (kind and kubectl come with the
+      # ubuntu runner image): realm-import Job, Keycloak in production mode, API health.
+      - name: Deployment smoke test (kind)
+        run: ./build.sh --target DeploySmoke

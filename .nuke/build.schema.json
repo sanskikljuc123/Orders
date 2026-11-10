@@ -28,6 +28,7 @@
         "ComputeVersion",
         "ContractTests",
         "CoverageGate",
+        "DeploySmoke",
         "E2ETests",
         "Helm",
         "Images",
@@ -137,6 +138,10 @@
           "type": "integer",
           "description": "How many times Stability runs each test project",
           "format": "int32"
+        },
+        "SmokeCluster": {
+          "type": "string",
+          "description": "kind cluster name for DeploySmoke"
         },
         "StabilityProjects": {
           "type": "array",

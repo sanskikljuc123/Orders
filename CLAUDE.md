@@ -130,6 +130,12 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
   (`TestResults/stability-summary.md`). With Orders.E2E, run `InstallBrowser` first. Nightly
   (`.github/workflows/ci-nightly.yml`) runs Stability for all four projects plus Mutation.
 - Every test target writes passed/failed/skipped and failed test names to the GitHub job summary.
+- Deployment smoke (nightly, needs Docker + kind + kubectl + helm): `./build.sh --target DeploySmoke`
+  installs the chart in a throwaway kind cluster and checks the realm Job (realm HTTPS-only, no
+  users) and API /health. Not runnable in the cloud dev container (no nested Kubernetes).
+  In the chart, Keycloak runs `start` (production mode) with `KC_HTTP_ENABLED`, `KC_PROXY_HEADERS`
+  and `KC_HOSTNAME` (behind a TLS-terminating ingress); without them it exits with
+  "Key material not provided to setup HTTPS".
 - Tests: `dotnet test`
 - Playwright browsers: `pwsh tests/Orders.E2E/bin/Debug/net10.0/playwright.ps1 install`
 - Unit: `dotnet test tests/Orders.UnitTests` | Integration (Docker): `dotnet test tests/Orders.IntegrationTests`

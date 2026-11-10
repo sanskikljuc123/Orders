@@ -193,6 +193,46 @@ class Build : NukeBuild
             Assert.True(failures.Count == 0, $"{failures.Count} test(s) failed in at least one run, see TestResults/stability-summary.md");
         });
 
+    [Parameter("kind cluster name for DeploySmoke")]
+    readonly string SmokeCluster = "orders-smoke";
+
+    Target DeploySmoke => _ => _
+        .DependsOn(Images, Publish)
+        .Executes(() =>
+        {
+            // Installs the real chart in a throwaway kind cluster (nightly CI; needs Docker, kind,
+            // kubectl, helm). helm --wait includes the realm-import hook Job, so a failing Job or a
+            // crashing pod fails the install. Then checks the realm and the API from inside.
+            var kind = ToolResolver.GetPathTool("kind");
+            var kubectl = ToolResolver.GetPathTool("kubectl");
+            var helm = ToolResolver.GetPathTool("helm");
+            var values = RootDirectory / "deploy" / $"values.{Environment}.yaml";
+            kind($"create cluster --name {SmokeCluster} --wait 180s");
+            try
+            {
+                foreach (var (_, image) in ContainerImages)
+                    kind($"load docker-image {image}:{Version} --name {SmokeCluster}");
+
+                helm($"install orders {ChartDir} -f {values} --set parameters.api.api_image=orders-api:{Version} --set parameters.payment.payment_image=orders-payment:{Version} --wait --timeout 10m");
+
+                // Realm created by the hook Job, with the production settings.
+                var realm = string.Join("\n", kubectl($"exec deploy/keycloak-deployment -- bash -c \"/opt/keycloak/bin/kcadm.sh config credentials --config /tmp/k --server http://localhost:8080 --realm master --user $KC_BOOTSTRAP_ADMIN_USERNAME --password $KC_BOOTSTRAP_ADMIN_PASSWORD && /opt/keycloak/bin/kcadm.sh get realms/orders --config /tmp/k --fields realm,sslRequired && /opt/keycloak/bin/kcadm.sh get users -r orders --config /tmp/k --fields username\"", logOutput: false)
+                    .Where(o => o.Type == OutputType.Std).Select(o => o.Text));
+                Assert.True(realm.Contains("\"sslRequired\" : \"all\""), $"realm 'orders' missing or not HTTPS-only: {realm}");
+                Assert.True(!realm.Contains("\"username\""), "production realm must have no users");
+
+                // API is up (through the Kubernetes API server's service proxy, no port-forward).
+                var health = string.Join("", kubectl("get --raw /api/v1/namespaces/default/services/api-service:http/proxy/health")
+                    .Where(o => o.Type == OutputType.Std).Select(o => o.Text));
+                Assert.True(health.Trim() == "Healthy", $"API /health answered '{health}'");
+                Serilog.Log.Information("Deployment smoke passed: chart installed, realm created (HTTPS-only, no users), API healthy");
+            }
+            finally
+            {
+                kind($"delete cluster --name {SmokeCluster}");
+            }
+        });
+
     Target Mutation => _ => _
         .DependsOn(Compile)
         .Executes(() =>
