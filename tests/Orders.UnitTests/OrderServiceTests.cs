@@ -179,8 +179,18 @@ public class OrderServiceTests
 
     // ---------- a paid order is never lost, a retry never charges twice ----------
 
-    private OrderService CreateSutWith(IOrderRepository repository) => new(_payment, repository, new FixedClock(Now), _locks,
-        Microsoft.Extensions.Logging.Abstractions.NullLogger<OrderService>.Instance);
+    private OrderService CreateSutWith(IOrderRepository repository, Microsoft.Extensions.Logging.ILogger<OrderService>? log = null) =>
+        new(_payment, repository, new FixedClock(Now), _locks,
+            log ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<OrderService>.Instance);
+
+    private sealed class RecordingLogger : Microsoft.Extensions.Logging.ILogger<OrderService>
+    {
+        public List<(Microsoft.Extensions.Logging.LogLevel Level, string Message)> Entries { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel level) => true;
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel level, Microsoft.Extensions.Logging.EventId id, TState state,
+            Exception? e, Func<TState, Exception?, string> formatter) => Entries.Add((level, formatter(state, e)));
+    }
 
     /// <summary>The real in-memory store, with single calls made to fail on purpose.</summary>
     private IOrderRepository StoreThat() => A.Fake<IOrderRepository>(o => o.Wrapping(_store));
@@ -221,11 +231,32 @@ public class OrderServiceTests
         var repository = StoreThat();
         A.CallTo(() => repository.CompletePendingAsync(A<Guid>._, A<string>._)).ThrowsAsync(new InvalidOperationException("database down"));
 
-        var placed = await CreateSutWith(repository).PlaceOrderAsync(new CreateOrderRequest("Book", 2), "ana", "key-1");
+        var log = new RecordingLogger();
+
+        var placed = await CreateSutWith(repository, log).PlaceOrderAsync(new CreateOrderRequest("Book", 2), "ana", "key-1");
 
         Assert.Equal(PlaceOutcome.Pending, placed.Outcome);
         Assert.Equal(OrderStatus.Pending, Assert.Single(await _store.ListAsync("ana")).Status);   // kept, never shown as Paid
         A.CallTo(() => _payment.ChargeAsync(20m, placed.Order.Id)).MustHaveHappenedOnceExactly();
+        // Operators find it by order id and know money may have moved.
+        var entry = Assert.Single(log.Entries);
+        Assert.Equal(Microsoft.Extensions.Logging.LogLevel.Error, entry.Level);
+        Assert.Equal($"Order {placed.Order.Id}: charge approved but its status could not be saved; it stays Pending until a retry", entry.Message);
+    }
+
+    [Fact]
+    public async Task Declined_charge_whose_status_cannot_be_saved_also_stays_Pending_never_failed_silently()
+    {
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).Returns(false);
+        var repository = StoreThat();
+        A.CallTo(() => repository.CompletePendingAsync(A<Guid>._, A<string>._)).ThrowsAsync(new InvalidOperationException("database down"));
+        var log = new RecordingLogger();
+
+        var placed = await CreateSutWith(repository, log).PlaceOrderAsync(new CreateOrderRequest("Book", 1), "ana", "key-1");
+
+        Assert.Equal(PlaceOutcome.Pending, placed.Outcome);
+        Assert.Equal(OrderStatus.Pending, Assert.Single(await _store.ListAsync("ana")).Status);
+        Assert.Contains("charge not approved", Assert.Single(log.Entries).Message);
     }
 
     // FAKED: settling a Pending order by charging its reference again relies on provider-side

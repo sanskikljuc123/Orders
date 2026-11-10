@@ -48,6 +48,9 @@ public class OrderService(IPaymentClient payment, IOrderRepository orders, TimeP
         // Fast path on one instance: same-key requests wait for each other here.
         using var _ = await locks.AcquireAsync($"{userId}\n{idempotencyKey}");
         var existing = await orders.FindByIdempotencyKeyAsync(userId, idempotencyKey);
+        // Stryker disable once Conditional : equivalent by design. Without this look-up the
+        // reservation is refused by the unique index and leads to ResumeAsync as well; the look-up
+        // only avoids a failed insert (logged by EF as an error) on every double click.
         return existing is not null
             ? await ResumeAsync(existing, req)
             : await ReserveAndChargeAsync(req, userId, idempotencyKey);
@@ -61,6 +64,7 @@ public class OrderService(IPaymentClient payment, IOrderRepository orders, TimeP
         {
             // Another instance reserved this key first: it charges, we do not.
             var owner = await orders.FindByIdempotencyKeyAsync(userId, idempotencyKey!)
+                // Stryker disable once String : unreachable unless orders are deleted (they never are).
                 ?? throw new InvalidOperationException("Idempotency key reserved but its order was not found.");
             return await ResumeAsync(owner, req);
         }
