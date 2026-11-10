@@ -24,6 +24,21 @@ public class OrderSteps(ScenarioBrowser browser, OrderContext ordered)
         await Shop.PlaceOrderAsync(ordered.LastProduct, quantity);
     }
 
+    [When("I order {int} of {string} with a double click")]
+    public async Task OrderWithDoubleClick(int quantity, string product)
+    {
+        ordered.LastProduct = $"{product} {Guid.NewGuid().ToString("N")[..8]}";
+        await Shop.OpenAsync();
+        await Shop.PlaceOrderWithDoubleClickAsync(ordered.LastProduct, quantity);
+    }
+
+    [Then("my orders contain that order exactly once")]
+    public async Task OrderedExactlyOnce()
+    {
+        await Shop.OpenMyOrdersAsync();   // fresh list, loaded after both requests were answered
+        await Assertions.Expect(Shop.MyOrders.Filter(new() { HasText = ordered.LastProduct! })).ToHaveCountAsync(1);
+    }
+
     [When("I order {int} without a product name")]
     public async Task OrderWithoutProduct(int quantity)
     {
@@ -39,6 +54,16 @@ public class OrderSteps(ScenarioBrowser browser, OrderContext ordered)
 
     [When("I open my orders")]
     public Task OpenMyOrders() => Shop.OpenMyOrdersAsync();
+
+    // Checks the UI and the server: a hidden form alone would still let the old session order.
+    // The login link comes first, so the hidden-form check runs on the reloaded, signed-out page.
+    [Then("I can no longer place an order")]
+    public async Task CannotPlaceOrder()
+    {
+        await Assertions.Expect(Shop.LoginLink).ToBeVisibleAsync();
+        await Assertions.Expect(Shop.PlaceOrderButton).ToBeHiddenAsync();
+        Assert.Equal(401, await Shop.SendOrderRequestAsync($"Book {Guid.NewGuid().ToString("N")[..8]}", 1));
+    }
 
     [Then("I see the result {string}")]
     public Task SeeResult(string expected) => Assertions.Expect(Shop.Result).ToHaveTextAsync(expected);

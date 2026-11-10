@@ -502,3 +502,6 @@ coveragereport/
 # ---- Tool-local files ----
 .claude/settings.local.json
 .nuke/temp/
+
+# Stryker.NET reports when run without --output
+StrykerOutput/

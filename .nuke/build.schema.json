@@ -26,14 +26,18 @@
       "enum": [
         "Compile",
         "ComputeVersion",
+        "ContractTests",
         "CoverageGate",
+        "DeploySmoke",
         "E2ETests",
         "Helm",
         "Images",
         "InstallBrowser",
         "IntegrationTests",
+        "Mutation",
         "Publish",
         "Restore",
+        "Stability",
         "Test",
         "UnitTests"
       ]
@@ -113,6 +117,11 @@
           "type": "string",
           "description": "Build configuration"
         },
+        "CriticalBranchFloor": {
+          "type": "number",
+          "description": "Minimum merged branch coverage % for each critical class",
+          "format": "double"
+        },
         "Environment": {
           "type": "string",
           "description": "Environment for deploy/values.<env>.yaml"
@@ -121,18 +130,29 @@
           "type": "string",
           "description": "Registry for --push-images (default ghcr.io; a local registry can be used to test the push)"
         },
-        "IntegrationBranchFloor": {
-          "type": "number",
-          "description": "Minimum branch coverage % from integration tests",
-          "format": "double"
-        },
         "PushImages": {
           "type": "boolean",
           "description": "Push container images to ghcr.io (CI sets this on pushes to main only)"
         },
-        "UnitBranchFloor": {
+        "Repeat": {
+          "type": "integer",
+          "description": "How many times Stability runs each test project",
+          "format": "int32"
+        },
+        "SmokeCluster": {
+          "type": "string",
+          "description": "kind cluster name for DeploySmoke"
+        },
+        "StabilityProjects": {
+          "type": "array",
+          "description": "Test projects for Stability (default: all four)",
+          "items": {
+            "type": "string"
+          }
+        },
+        "TotalBranchFloor": {
           "type": "number",
-          "description": "Minimum branch coverage % from unit tests",
+          "description": "Minimum merged branch coverage % for all production code",
           "format": "double"
         }
       }

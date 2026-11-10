@@ -6,6 +6,8 @@ namespace Orders.E2E.Pages;
 /// </summary>
 public class KeycloakLoginPage(IPage page)
 {
+    public ILocator PasswordField => page.Locator("#password");
+
     public async Task SubmitAsync(string user, string password)
     {
         await page.Locator("#username").FillAsync(user);

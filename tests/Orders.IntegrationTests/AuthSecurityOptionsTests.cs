@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
 
 /// <summary>
 /// The relaxed http-only login settings must exist only where appsettings.Development.json turns
@@ -54,5 +56,25 @@ public class AuthSecurityOptionsTests
         Assert.Equal("query", oidc.ResponseMode);
         Assert.Equal(SameSiteMode.Lax, oidc.CorrelationCookie.SameSite);
         Assert.Equal(CookieSecurePolicy.SameAsRequest, cookie.Cookie.SecurePolicy);
+    }
+
+    [Fact]
+    public async Task Login_cookie_sessions_live_on_the_server_so_logout_can_revoke_them()
+    {
+        using var api = new ApiInEnvironment("Production");
+        var cookie = api.Services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
+            .Get(CookieAuthenticationDefaults.AuthenticationScheme);
+
+        // The app's own configured store (and its cache), not a test double.
+        var store = Assert.IsType<SessionStore>(cookie.SessionStore);
+        var ticket = new AuthenticationTicket(
+            new ClaimsPrincipal(new ClaimsIdentity([new Claim("preferred_username", "ana")], "test")),
+            new AuthenticationProperties(), CookieAuthenticationDefaults.AuthenticationScheme);   // no expiry: default lifetime
+
+        var key = await store.StoreAsync(ticket);
+        Assert.Equal("ana", (await store.RetrieveAsync(key))!.Principal.FindFirst("preferred_username")!.Value);
+
+        await store.RemoveAsync(key);   // what sign-out does
+        Assert.Null(await store.RetrieveAsync(key));
     }
 }

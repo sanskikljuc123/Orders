@@ -238,6 +238,13 @@ Browser = await _playwright.Chromium.LaunchAsync(new() { Headless = Environment.
 
 ## 6. Login once (Keycloak storage state)
 
+**Except for logout scenarios:** they end the session. Using the shared cached login there breaks
+every later scenario that reuses it (especially with server-side sessions). Give logout scenarios
+their own fresh login in their own browser context, and test what logout must achieve: the app
+session, the identity provider session ("must enter the password again"), and server-side
+revocation (a copied cookie is rejected afterwards, accepted before).
+
+
 ```csharp
 public static async Task<string> GetStorageStateAsync(string user)
 {

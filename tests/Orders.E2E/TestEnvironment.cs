@@ -59,7 +59,7 @@ public static class TestEnvironment
     }
 
     /// <summary>Test users from src/Orders.AppHost/Realms/orders-realm.json; never real accounts.</summary>
-    private static string PasswordFor(string user) => user switch
+    public static string PasswordFor(string user) => user switch
     {
         "ana" => "ana123",
         "bob" => "bob123",

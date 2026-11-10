@@ -17,10 +17,15 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
-      "redirectUris": ["https://orders.example.com/signin-oidc"],
-      "webOrigins": ["https://orders.example.com"],
+      "redirectUris": [
+        "https://orders.example.com/signin-oidc"
+      ],
+      "webOrigins": [
+        "https://orders.example.com"
+      ],
       "attributes": {
-        "pkce.code.challenge.method": "S256"
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://orders.example.com/signout-callback-oidc"
       }
     }
   ]

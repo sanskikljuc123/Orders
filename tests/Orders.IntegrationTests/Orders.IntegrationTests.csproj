@@ -33,4 +33,10 @@
     <None Include="..\..\src\Orders.AppHost\Realms\orders-realm.json" Link="Realms\orders-realm.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Random test order with a printed seed (tests/TestSupport/RandomTestOrder.cs). -->
+    <Compile Include="..\TestSupport\RandomTestOrder.cs" Link="TestSupport\RandomTestOrder.cs" />
+    <Content Include="..\TestSupport\xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

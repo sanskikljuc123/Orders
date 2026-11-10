@@ -27,5 +27,8 @@
 # only on in appsettings.Development.json), so the chart's internal http://keycloak-service:8080
 # authority is refused. Point it at Keycloak's public HTTPS address (TLS ingress in front of it).
 config:
+  keycloak:
+    # Public HTTPS address of Keycloak (TLS terminated by the ingress). PLACEHOLDER, replace.
+    keycloak_hostname: "https://auth.example.com"
   api:
     Auth__Authority: "https://auth.example.com/realms/orders"   # PLACEHOLDER, replace with the real URL

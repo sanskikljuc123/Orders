@@ -50,8 +50,11 @@ contract are for local use only (see `CLAUDE.md` and `src/FakePaymentService/REA
 
 ## Tests and build
 
+What each risk is tested by: [`TESTING.md`](TESTING.md). Commands and quality gates (coverage,
+mutation, stability, deployment smoke): [`CLAUDE.md`](CLAUDE.md).
+
 ```bash
-./build.sh --target Test Helm
+./build.sh --target Test Helm Images
 ```
 
 runs exactly what CI runs: compile, unit tests, integration tests (Docker), coverage gate,

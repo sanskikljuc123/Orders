@@ -36,6 +36,23 @@ public class ProductionRealmTests
         Assert.Equal("S256", WebClient.GetProperty("attributes").GetProperty("pkce.code.challenge.method").GetString());
     }
 
+    [Fact]
+    public void Logout_returns_only_to_the_exact_https_callback()
+    {
+        // Keycloak stores several URIs separated by "##"; "+" (= same as redirectUris) is not allowed
+        // here so the allowed logout targets stay explicit.
+        var uris = WebClient.GetProperty("attributes").GetProperty("post.logout.redirect.uris")
+            .GetString()!.Split("##");
+
+        Assert.All(uris, uri =>
+        {
+            Assert.DoesNotContain("*", uri);
+            Assert.NotEqual("+", uri);
+            Assert.StartsWith("https://", uri);
+            Assert.EndsWith("/signout-callback-oidc", uri);
+        });
+    }
+
     [Theory]
     [InlineData("redirectUris")]
     [InlineData("webOrigins")]

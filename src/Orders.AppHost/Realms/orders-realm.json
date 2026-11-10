@@ -9,8 +9,15 @@
       "publicClient": true,
       "directAccessGrantsEnabled": true,
       "standardFlowEnabled": true,
-      "redirectUris": ["*"],
-      "webOrigins": ["*"]
+      "redirectUris": [
+        "*"
+      ],
+      "webOrigins": [
+        "*"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "+"
+      }
     }
   ],
   "users": [
@@ -22,7 +29,11 @@
       "firstName": "Ana",
       "lastName": "Test",
       "credentials": [
-        { "type": "password", "value": "ana123", "temporary": false }
+        {
+          "type": "password",
+          "value": "ana123",
+          "temporary": false
+        }
       ]
     },
     {
@@ -33,7 +44,11 @@
       "firstName": "Bob",
       "lastName": "Test",
       "credentials": [
-        { "type": "password", "value": "bob123", "temporary": false }
+        {
+          "type": "password",
+          "value": "bob123",
+          "temporary": false
+        }
       ]
     }
   ]

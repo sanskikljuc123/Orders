@@ -45,17 +45,21 @@
       await loadOrders();
     }
 
+    // One key per order attempt: a double click or a retry sends the same key, so the server
+    // returns the first order instead of charging twice. A new key is made after each success.
+    let orderAttemptKey = crypto.randomUUID();
+
     $('submit').onclick = async () => {
       const res = await fetch('/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': orderAttemptKey },
         body: JSON.stringify({
           productName: $('product').value,
           quantity: Number($('quantity').value)
         })
       });
       const out = $('result');
-      if (res.ok) { out.textContent = 'Order ' + (await res.json()).status; await loadOrders(); }
+      if (res.ok) { orderAttemptKey = crypto.randomUUID(); out.textContent = 'Order ' + (await res.json()).status; await loadOrders(); }
       else if (res.status === 401) { out.textContent = 'Please log in'; }
       else { out.textContent = 'Validation error'; }
     };

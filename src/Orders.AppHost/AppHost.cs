@@ -17,6 +17,17 @@ if (!builder.ExecutionContext.IsPublishMode)
 {
     keycloak.WithRealmImport("Realms");
 }
+else
+{
+    // Kubernetes: Keycloak's production mode ("start") refuses to start without TLS or a hostname
+    // ("Key material not provided to setup HTTPS", exit 2). It serves plain HTTP inside the cluster
+    // behind an ingress that terminates HTTPS, and builds its URLs from the public hostname.
+    var keycloakHostname = builder.AddParameter("keycloak-hostname");
+    keycloak
+        .WithEnvironment("KC_HTTP_ENABLED", "true")
+        .WithEnvironment("KC_PROXY_HEADERS", "xforwarded")
+        .WithEnvironment("KC_HOSTNAME", keycloakHostname);
+}
 
 var postgres = builder.AddPostgres("postgres");
 var ordersDb = postgres.AddDatabase("ordersdb");

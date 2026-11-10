@@ -241,3 +241,31 @@ Verify the package and property names for the version you install.
 - Narrow catches only: a readiness poll may catch `HttpRequestException`, never `catch { }`.
 - xUnit 2 has no built-in random order; keep tests order-independent by construction (fresh
   instance per test, unique data) and run the suite twice.
+
+## 8. Lessons from a full project (each was a real bug or a gate that lied)
+
+- **Library messages depend on the culture.** FluentValidation translates its default messages
+  from `CurrentUICulture`; exact-message tests failed on a German machine, and the API would send
+  translated errors. Give contract-relevant messages explicitly (`.WithMessage(...)`) and run the
+  message tests under a non-English culture.
+- **Coverage must exclude generated code.** EF migrations made integration coverage look better
+  and unit coverage worse than reality. Exclude them (`coverlet.runsettings`:
+  `ExcludeByFile **/Migrations/*.cs`), merge unit + contract + integration reports, and put floors
+  on critical classes (lines AND branches: a class with no branches passes any branch floor).
+- **Mutation testing finds weak assertions coverage cannot.** Stryker.NET as a local tool on the
+  critical files; survivors become tests or are documented as unobservable. Its thresholds must
+  satisfy `break <= low <= high`, otherwise it exits without a message.
+- **Test the real HTTP client.** When integration tests replace a client with a fake, the client
+  itself is untested. Unit-test it with a stub `HttpMessageHandler` (errors, garbage, timeout) and
+  contract-test it against the fake in-process; share the contract types between both.
+- **Double submit / retry:** a payment endpoint needs an idempotency key and a concurrency test.
+  Wait deterministically (e.g. until N callers wait on the lock), never with a fixed delay.
+- **Inject `TimeProvider`** wherever time affects behaviour (order timestamps, session expiry).
+- **Random test order** (xUnit 2 `ITestCaseOrderer` / `ITestCollectionOrderer`, printed seed) and a
+  repeat-N "stability" run expose order-dependent tests; prove it with a deliberate pair once.
+- **`helm lint`/`template` do not prove a deployment works.** Run the generated containers with the
+  chart's exact settings (e.g. Keycloak `start` without TLS/hostname exits immediately) and install
+  the chart in a throwaway cluster (kind) where the environment allows.
+- **NUKE quotes interpolated values with spaces as one argument** (`$"cmd{flags}"` with
+  `flags = " --x"` breaks). Write the full command per case.
+

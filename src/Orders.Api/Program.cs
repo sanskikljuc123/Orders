@@ -17,14 +17,21 @@ builder.Host.UseServiceProviderFactory(new AutofacServiceProviderFactory());
 builder.Host.ConfigureContainer<ContainerBuilder>(c =>
 {
     c.RegisterType<OrderService>();
+    c.RegisterType<IdempotencyLocks>().SingleInstance();
     c.RegisterType<CreateOrderValidator>().As<IValidator<CreateOrderRequest>>().SingleInstance();
 });
 builder.Services.AddFusionCache();
+builder.Services.AddSingleton(TimeProvider.System);   // replaced with a fixed clock in tests
 builder.Services.AddHealthChecks();
 
 var paymentUrl = builder.Configuration["Payment:BaseUrl"];
 if (!string.IsNullOrEmpty(paymentUrl))
-    builder.Services.AddHttpClient<IPaymentClient, HttpPaymentClient>(c => c.BaseAddress = new Uri(paymentUrl));
+    builder.Services.AddHttpClient<IPaymentClient, HttpPaymentClient>(c =>
+    {
+        c.BaseAddress = new Uri(paymentUrl);
+        // The default (100 s) would hold the order request open for a slow provider.
+        c.Timeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("Payment:TimeoutSeconds", 10));
+    });
 else
     builder.Services.AddSingleton<IPaymentClient, AlwaysApprovedPaymentClient>();
 
@@ -101,9 +108,16 @@ if (authEnabled)
             // Otherwise the handler defaults apply: form_post, SameSite=None + Secure correlation/nonce cookies.
             o.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
             o.Scope.Add("profile");
+            o.SaveTokens = true;   // id_token_hint for Keycloak logout
             o.TokenValidationParameters.NameClaimType = "preferred_username";
         });
     builder.Services.AddAuthorization();
+
+    // Server-side sessions: the cookie holds only a key, and logout deletes the session, so a copied
+    // cookie cannot be replayed after logout.
+    builder.Services.AddSingleton<SessionStore>();
+    builder.Services.AddOptions<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme)
+        .Configure<SessionStore>((o, store) => o.SessionStore = store);
 }
 
 var app = builder.Build();
@@ -128,9 +142,12 @@ if (authEnabled)
     app.MapGet("/login", () =>
         Results.Challenge(new AuthenticationProperties { RedirectUri = "/" }, new[] { "oidc" }));
 
+    // Ends both sessions: the app cookie and Keycloak's own (RP-initiated logout via the end-session
+    // endpoint, with the saved id_token as hint). Clearing only the cookie left Keycloak signed in,
+    // so "Log in" signed the user straight back in without a password.
     app.MapGet("/logout", () =>
         Results.SignOut(new AuthenticationProperties { RedirectUri = "/" },
-            new[] { CookieAuthenticationDefaults.AuthenticationScheme }));
+            new[] { CookieAuthenticationDefaults.AuthenticationScheme, "oidc" }));
 }
 
 var me = app.MapGet("/me", (ClaimsPrincipal user) => Results.Ok(new { name = UserIds.Name(user) }));
@@ -144,6 +161,8 @@ if (authEnabled)
 orders.MapPost("", async (
     CreateOrderRequest req,
     ClaimsPrincipal user,
+    HttpContext http,
+    [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
     [FromServices] IValidator<CreateOrderRequest> validator,
     [FromServices] OrderService orderService) =>
 {
@@ -151,8 +170,16 @@ orders.MapPost("", async (
     if (!result.IsValid)
         return Results.ValidationProblem(result.ToDictionary());
 
-    var order = await orderService.PlaceOrderAsync(req, UserIds.Get(user));
-    return Results.Created($"/orders/{order.Id}", order);
+    if (idempotencyKey is not null && (string.IsNullOrWhiteSpace(idempotencyKey) || idempotencyKey.Length > 100))
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["Idempotency-Key"] = ["'Idempotency-Key' must be 1 to 100 characters."]
+        });
+
+    var placed = await orderService.PlaceOrderAsync(req, UserIds.Get(user), idempotencyKey);
+    if (placed.Replayed)
+        http.Response.Headers["Idempotent-Replayed"] = "true";   // same order, not charged again
+    return Results.Created($"/orders/{placed.Order.Id}", placed.Order);
 });
 
 orders.MapGet("", async (
@@ -184,16 +211,8 @@ public record Order(
     int Quantity,
     string Status,
     string UserId = "anonymous",
-    DateTimeOffset CreatedAt = default);
-
-public class CreateOrderValidator : AbstractValidator<CreateOrderRequest>
-{
-    public CreateOrderValidator()
-    {
-        RuleFor(x => x.ProductName).NotEmpty().MaximumLength(50);
-        RuleFor(x => x.Quantity).InclusiveBetween(1, 100);
-    }
-}
+    DateTimeOffset CreatedAt = default,
+    [property: System.Text.Json.Serialization.JsonIgnore] string? IdempotencyKey = null);
 
 public static class UserIds
 {
@@ -208,25 +227,10 @@ public static class UserIds
         ?? "anonymous";
 }
 
-public interface IPaymentClient { Task<bool> ChargeAsync(decimal amount); }
-
 public class AlwaysApprovedPaymentClient : IPaymentClient
 {
     public Task<bool> ChargeAsync(decimal amount) => Task.FromResult(true);
 }
-
-public class HttpPaymentClient(HttpClient http) : IPaymentClient
-{
-    public async Task<bool> ChargeAsync(decimal amount)
-    {
-        var res = await http.PostAsJsonAsync("/charge", new { amount });
-        if (!res.IsSuccessStatusCode) return false;
-        var body = await res.Content.ReadFromJsonAsync<ChargeResponse>();
-        return body?.Approved ?? false;
-    }
-}
-
-public record ChargeResponse(bool Approved);
 
 // Lets WebApplicationFactory<Program> in tests/Orders.IntegrationTests reach the top-level Program.
 public partial class Program { }

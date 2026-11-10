@@ -25,4 +25,29 @@ public class UserIdsTests
     {
         Assert.Equal("anonymous", UserIds.Get(new ClaimsPrincipal(new ClaimsIdentity())));
     }
+
+    // Name is what the UI shows as "Signed in as ..." (/me).
+
+    [Fact]
+    public void Name_comes_from_the_identity_name()
+    {
+        var user = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim("preferred_username", "ana"), new Claim(ClaimTypes.Name, "Ana Name")], "test"));
+
+        Assert.Equal("Ana Name", UserIds.Name(user));
+    }
+
+    [Fact]
+    public void Name_falls_back_to_preferred_username()
+    {
+        // NameClaimType set to something the token does not carry, so Identity.Name is null.
+        var user = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim("preferred_username", "ana")], "test", "missing-name-claim", ClaimTypes.Role));
+
+        Assert.Equal("ana", UserIds.Name(user));
+    }
+
+    [Fact]
+    public void Name_of_an_unauthenticated_user_is_anonymous()
+        => Assert.Equal("anonymous", UserIds.Name(new ClaimsPrincipal(new ClaimsIdentity())));
 }

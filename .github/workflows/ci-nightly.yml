@@ -1,0 +1,52 @@
+name: CI nightly
+
+# Slower checks that would make every pull request wait: each test project several times in a new
+# random order (flaky / order-dependent tests), and mutation testing of the critical code.
+on:
+  schedule:
+    - cron: "17 2 * * *"   # 02:17 UTC daily
+  workflow_dispatch:
+
+jobs:
+  stability-and-mutation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # GitVersion needs the full history
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # NUKE is the single entry point. Stability runs all four test projects 3 times;
+      # Mutation runs Stryker with the break thresholds in stryker/*.json.
+      - name: Stability (3 runs, random order) and mutation testing
+        run: ./build.sh --target InstallBrowser Stability Mutation --repeat 3
+
+      - name: Upload results (trx, stability and mutation reports)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nightly-results
+          path: TestResults
+
+  deployment-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - uses: azure/setup-helm@v5
+        with:
+          version: v3.22.1
+
+      # Installs the generated chart in a throwaway kind cluster (kind and kubectl come with the
+      # ubuntu runner image): realm-import Job, Keycloak in production mode, API health.
+      - name: Deployment smoke test (kind)
+        run: ./build.sh --target DeploySmoke
