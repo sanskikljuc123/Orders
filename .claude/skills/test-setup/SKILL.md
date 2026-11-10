@@ -147,6 +147,8 @@ plainly, give the exact command, and don't report it as passing.
 - [ ] No real external network in unit tests; no real third-party services anywhere.
 - [ ] No catch-all `try { } catch { }` that swallows failures in tests, steps or hooks.
 - [ ] Edge and error cases covered, not only the happy path.
+- [ ] Every API endpoint has its row in the endpoint matrix (auth, ownership, broken input, shape);
+      new endpoints are caught by an endpoint-discovery auth test, not by memory.
 - [ ] No negative-only assertions: every "does not contain / is not visible" is paired with a
       positive check proving the data actually loaded.
 - [ ] Tests are independent: pass alone and in any order; fresh browser context per scenario.
