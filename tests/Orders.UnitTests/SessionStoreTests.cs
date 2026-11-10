@@ -12,7 +12,10 @@ public class SessionStoreTests
         public override DateTimeOffset GetUtcNow() => now;
     }
 
-    private readonly SessionStore _store = new(new FusionCache(new FusionCacheOptions()), new FixedClock(Now));   // real in-memory cache
+    private readonly FusionCache _cache = new(new FusionCacheOptions());   // real in-memory cache, shared with other app data
+    private readonly SessionStore _store;
+
+    public SessionStoreTests() => _store = new SessionStore(_cache, new FixedClock(Now));
 
     private static AuthenticationTicket Ticket(string user, DateTimeOffset? expires = null, bool noExpiry = false) => new(
         new ClaimsPrincipal(new ClaimsIdentity([new Claim("preferred_username", user)], "test")),
@@ -71,6 +74,26 @@ public class SessionStoreTests
         var key = await _store.StoreAsync(Ticket("ana"));
 
         await _store.RenewAsync(key, Ticket("ana", expires: Now));
+
+        Assert.Null(await _store.RetrieveAsync(key));
+    }
+
+    [Fact]
+    public async Task Two_users_sessions_do_not_overwrite_each_other()
+    {
+        var ana = await _store.StoreAsync(Ticket("ana"));
+        var bob = await _store.StoreAsync(Ticket("bob"));
+
+        Assert.Equal("ana", (await _store.RetrieveAsync(ana))!.Principal.FindFirst("preferred_username")!.Value);
+        Assert.Equal("bob", (await _store.RetrieveAsync(bob))!.Principal.FindFirst("preferred_username")!.Value);
+    }
+
+    [Fact]
+    public async Task Sessions_do_not_clash_with_other_data_in_the_same_cache()
+    {
+        // The app caches orders in the same FusionCache; a session key must never read them.
+        var key = Guid.NewGuid().ToString("N");
+        await _cache.SetAsync(key, "some other cached value");
 
         Assert.Null(await _store.RetrieveAsync(key));
     }

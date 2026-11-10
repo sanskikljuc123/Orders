@@ -1,0 +1,12 @@
+{
+  "stryker-config": {
+    "project": "Orders.Shared.csproj",
+    "test-projects": [
+      "../tests/Orders.UnitTests/Orders.UnitTests.csproj",
+      "../tests/Orders.ContractTests/Orders.ContractTests.csproj"
+    ],
+    "mutate": ["**/Payments.cs"],
+    "reporters": ["progress", "cleartext", "html", "json"],
+    "thresholds": { "high": 95, "low": 90, "break": 90 }
+  }
+}

@@ -109,9 +109,12 @@ public class OrderServiceTests
         A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).Returns(true);
         var sut = CreateSut();
 
-        await sut.PlaceOrderAsync(new CreateOrderRequest("Book", 1), "ana");
-        await sut.PlaceOrderAsync(new CreateOrderRequest("Book", 1), "ana");
+        var first = await sut.PlaceOrderAsync(new CreateOrderRequest("Book", 1), "ana");
+        var second = await sut.PlaceOrderAsync(new CreateOrderRequest("Book", 1), "ana");
 
+        Assert.False(first.Replayed);
+        Assert.False(second.Replayed);
+        Assert.NotEqual(first.Order.Id, second.Order.Id);
         A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).MustHaveHappenedTwiceExactly();
     }
 
@@ -142,8 +145,9 @@ public class OrderServiceTests
             .ToList();
         // Wait until all 10 hold or wait for the same key's lock (no fixed sleep). If the lock were
         // missing this never becomes true, the wait gives up, and the charge count below fails.
-        SpinWait.SpinUntil(() => _locks.UsersOf("ana\ndouble-click") == 10, TimeSpan.FromSeconds(5));
+        var allQueued = SpinWait.SpinUntil(() => _locks.UsersOf("ana\ndouble-click") == 10, TimeSpan.FromSeconds(5));
         charging.SetResult();
+        Assert.True(allQueued, "all 10 requests should wait on the same per-user, per-key lock");
         var placed = await Task.WhenAll(requests);
 
         A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).MustHaveHappenedOnceExactly();

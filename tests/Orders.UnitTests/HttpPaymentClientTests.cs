@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 /// <summary>
@@ -9,7 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 /// </summary>
 public class HttpPaymentClientTests
 {
-    private sealed class StubProvider(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> answer) : HttpMessageHandler
+    public sealed class StubProvider(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> answer) : HttpMessageHandler
     {
         public HttpRequestMessage? LastRequest { get; private set; }
         public string? LastBody { get; private set; }
@@ -28,9 +29,19 @@ public class HttpPaymentClientTests
             Content = new StringContent(body, Encoding.UTF8, "application/json")
         }));
 
-    private static HttpPaymentClient Client(HttpMessageHandler provider, TimeSpan? timeout = null) =>
+    /// <summary>Records what the client logs: an unpaid order must leave a visible reason for operators.</summary>
+    private sealed class RecordingLogger : ILogger<HttpPaymentClient>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel level, EventId id, TState state, Exception? e, Func<TState, Exception?, string> format) =>
+            Entries.Add((level, format(state, e)));
+    }
+
+    private static HttpPaymentClient Client(HttpMessageHandler provider, TimeSpan? timeout = null, ILogger<HttpPaymentClient>? log = null) =>
         new(new HttpClient(provider) { BaseAddress = new Uri("http://payment.test"), Timeout = timeout ?? TimeSpan.FromSeconds(10) },
-            NullLogger<HttpPaymentClient>.Instance);
+            log ?? NullLogger<HttpPaymentClient>.Instance);
 
     [Fact]
     public async Task Sends_the_amount_to_POST_charge()
@@ -76,5 +87,40 @@ public class HttpPaymentClientTests
         var paid = await Client(provider, timeout: TimeSpan.FromMilliseconds(200)).ChargeAsync(10m);
 
         Assert.False(paid);
+    }
+
+    // ---------- every unpaid outcome leaves a warning that says why ----------
+
+    // The expected reason text comes first so each test row is named after it.
+    public static TheoryData<string, Func<StubProvider>> FailuresAndReasons => new()
+    {
+        { "answered 500", () => Answering(HttpStatusCode.InternalServerError, "") },
+        { "unreadable answer", () => Answering(HttpStatusCode.OK, "not json") },
+        { "unreachable", () => new StubProvider((_, _) => throw new HttpRequestException("refused")) },
+        { "timed out", () => new StubProvider(async (_, ct) => { await Task.Delay(Timeout.Infinite, ct); return null!; }) },
+    };
+
+    [Theory]
+    [MemberData(nameof(FailuresAndReasons))]
+    public async Task Unpaid_outcome_is_logged_as_a_warning_with_its_reason(string reason, Func<StubProvider> provider)
+    {
+        var log = new RecordingLogger();
+
+        await Client(provider(), TimeSpan.FromMilliseconds(200), log).ChargeAsync(10m);
+
+        var entry = Assert.Single(log.Entries);
+        Assert.Equal(LogLevel.Warning, entry.Level);
+        Assert.Contains(reason, entry.Message);
+        Assert.Contains("order not paid", entry.Message);
+    }
+
+    [Fact]
+    public async Task Approved_payment_logs_no_warning()
+    {
+        var log = new RecordingLogger();
+
+        await Client(Answering(HttpStatusCode.OK, """{"approved":true}"""), log: log).ChargeAsync(10m);
+
+        Assert.Empty(log.Entries);
     }
 }

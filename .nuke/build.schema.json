@@ -33,6 +33,7 @@
         "Images",
         "InstallBrowser",
         "IntegrationTests",
+        "Mutation",
         "Publish",
         "Restore",
         "Test",

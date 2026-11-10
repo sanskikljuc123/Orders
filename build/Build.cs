@@ -141,6 +141,17 @@ class Build : NukeBuild
             Assert.True(failures.Count == 0, string.Join("; ", failures));
         });
 
+    Target Mutation => _ => _
+        .DependsOn(Compile)
+        .Executes(() =>
+        {
+            // Stryker.NET breaks the critical code on purpose and checks the tests notice. The
+            // "break" threshold in each stryker/*.json fails the build when too many survive.
+            // Run nightly (ci-nightly.yml); a few minutes, so not on every pull request.
+            foreach (var config in new[] { "api", "shared" })
+                DotNet($"stryker --config-file {config}.json --output {ResultsDir / "mutation" / config}", RootDirectory / "stryker");
+        });
+
     Target Publish => _ => _
         .DependsOn(Compile)
         .Executes(() =>

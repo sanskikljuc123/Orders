@@ -117,6 +117,12 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
   and each critical class (`CriticalClasses` in `build/Build.cs`) >= 80% lines and branches.
   Summary: `TestResults/coverage-summary.md` (and the GitHub job summary). Raise floors with real
   tests (`--total-branch-floor`, `--critical-branch-floor`); never write tests just to hit them.
+- Mutation testing (Stryker.NET 5, local tool): `./build.sh --target Mutation` runs `stryker/api.json`
+  (OrderService, SessionStore, CreateOrderValidator with the unit tests; break below 85%) and
+  `stryker/shared.json` (payment client with unit + contract tests; break below 90%). Reports in
+  `TestResults/mutation/*/reports/`. Stryker rejects thresholds unless break <= low <= high.
+  Known surviving mutants (SessionStore expiry boundary and cache duration) are not observable:
+  the cookie handler checks expiry itself.
 - Tests: `dotnet test`
 - Playwright browsers: `pwsh tests/Orders.E2E/bin/Debug/net10.0/playwright.ps1 install`
 - Unit: `dotnet test tests/Orders.UnitTests` | Integration (Docker): `dotnet test tests/Orders.IntegrationTests`
