@@ -14,7 +14,7 @@ browser), **N** nightly only (`.github/workflows/ci-nightly.yml`).
 |---|---|
 | Wrong amount charged | U `OrderServiceTests.Charges_10_per_item`; I `OrdersApiTests.Order_charges_quantity_times_10` |
 | Declined or failed payment shown as paid | U `Declined_payment_gives_PaymentFailed_order`; I `Declined_payment_returns_order_with_PaymentFailed_status`, `Declined_order_is_stored_as_PaymentFailed`; E "Order is marked as failed when payment is declined", "Order is never shown as paid when the payment service fails" |
-| Double click or retry charges twice | U `Repeating_a_request_with_the_same_key_…`, `Concurrent_requests_with_the_same_key_charge_only_once`, `IdempotencyLocksTests`; I `IdempotencyTests` (same order, one row, one charge; unique index); E "An impatient double click places the order only once" |
+| Double click or retry charges twice | U `Repeating_a_request_with_the_same_key_…`, `Concurrent_requests_with_the_same_key_charge_only_once`, `IdempotencyLocksTests`; I `IdempotencyTests` (same order, one row, one charge; unique index; `Concurrent_requests_with_the_same_key_through_the_API_charge_once`: overlapping requests through HTTP and the app's DI, so a lock that is not shared fails it); E "An impatient double click places the order only once" |
 | A reused key silently returns an old order for a new request | U `Reusing_a_key_for_a_different_order_is_rejected_without_charging` (other product, quantity, case); I `Same_key_for_a_different_order_returns_422_and_is_not_charged_or_stored` |
 | Order lost (paid but not stored) | U `Declined_order_is_still_saved_for_the_user`; I `Placed_order_is_stored_with_owner_and_status`, `Created_order_can_be_fetched_from_its_Location` |
 | Invalid order charged or stored | U `CreateOrderValidatorTests` (all boundaries, messages, any culture); I `Invalid_order_returns_400_with_field_errors_and_is_not_charged`, `Invalid_order_is_not_stored`; E "Order without a product name is rejected" |
@@ -26,6 +26,7 @@ browser), **N** nightly only (`.github/workflows/ci-nightly.yml`).
 |---|---|
 | Client and fake disagree on route, body or meaning | C `PaymentContractTests` (approve, decline, error, reset, response shape) |
 | Provider error, garbage answer, outage or slowness crashes ordering or hangs | U `HttpPaymentClientTests` (`Anything_but_a_clear_approval_means_not_paid`, `Unreachable_provider_…`, `Provider_that_does_not_answer_in_time_…`) |
+| A hanging provider holds order requests open (timeout not applied) | I `PaymentWiringTests` (the real client from Program.cs gives up after `Payment:TimeoutSeconds`) |
 | Unpaid orders with no trace for operators | U `Unpaid_outcome_is_logged_as_a_warning_with_its_reason` |
 | Fake differs from the real provider | **Not covered**: the contract is an UNVERIFIED ASSUMPTION (`src/FakePaymentService/README.md`) |
 
@@ -45,6 +46,7 @@ browser), **N** nightly only (`.github/workflows/ci-nightly.yml`).
 | A dependency with a known vulnerability ships | every restore: NuGet audit fails on High/Critical, direct or transitive (`Directory.Build.props`); Dependabot update PRs |
 | Insecure code (weak crypto, disabled validation, injectable SQL) | every build: .NET security analyzers, findings are errors |
 | A container image with a known fixable vulnerability is pushed | `Images` target: Trivy scan before any push (HIGH/CRITICAL with a fix fail; it caught apt in the full base image, now chiseled) |
+| A deployment misses a setting and runs without login, without charging or without a database | I `StartupConfigurationTests` (Production refuses to start, names what is missing; Development still starts) |
 | Production runs with the plain-http dev login settings | I `AuthSecurityOptionsTests.Production_requires_https_and_secure_cookies` |
 | Production realm gets test users, wildcards, plain HTTP or password login | U `ProductionRealmTests`; N `DeploySmoke` (realm in a real cluster: HTTPS-only, no users) |
 | Test realm or generated passwords reach git or a deployment | `.gitignore` (`k8s-artifacts/`); AppHost imports the test realm only outside publish mode (not automated: reviewed) |

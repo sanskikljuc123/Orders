@@ -64,6 +64,41 @@ public class IdempotencyTests
     }
 
     [Fact]
+    public async Task Concurrent_requests_with_the_same_key_through_the_API_charge_once()
+    {
+        // The unit test builds its own lock; this one goes through HTTP and the app's DI, so it
+        // also fails if the lock is not one shared instance (e.g. registered per request).
+        var ana = await _fixture.CreateClientAsAsync("ana");
+        var key = Guid.NewGuid().ToString();
+        var product = $"Book-{Guid.NewGuid():N}";
+        var charging = new TaskCompletionSource();
+        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._)).ReturnsLazily(async () => { await charging.Task; return true; });
+        var locks = _fixture.Services.GetRequiredService<IdempotencyLocks>();
+        var lockKey = $"{SubjectOf(ana)}\n{key}";
+
+        var requests = Enumerable.Range(0, 3).Select(_ => ana.SendAsync(Post(new CreateOrderRequest(product, 1), key))).ToList();
+        // All three hold or wait for the same lock before the charge is released (no fixed sleep).
+        var allQueued = SpinWait.SpinUntil(() => locks.UsersOf(lockKey) == 3, TimeSpan.FromSeconds(10));
+        charging.SetResult();
+        var responses = await Task.WhenAll(requests);
+
+        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._)).MustHaveHappenedOnceExactly();
+        Assert.All(responses, r => Assert.Equal(HttpStatusCode.Created, r.StatusCode));
+        var ids = await Task.WhenAll(responses.Select(async r => (await r.Content.ReadFromJsonAsync<Order>())!.Id));
+        Assert.Single(ids.Distinct());
+        Assert.Equal(1, await RowsWithProductAsync(product));
+        Assert.True(allQueued, "all three requests should have waited on the same shared lock");
+    }
+
+    /// <summary>The token's "sub" claim: the user id the API locks and stores orders under.</summary>
+    private static string SubjectOf(HttpClient client)
+    {
+        var payload = client.DefaultRequestHeaders.Authorization!.Parameter!.Split('.')[1].Replace('-', '+').Replace('_', '/');
+        var json = Convert.FromBase64String(payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '='));
+        return System.Text.Json.JsonDocument.Parse(json).RootElement.GetProperty("sub").GetString()!;
+    }
+
+    [Fact]
     public async Task Without_a_key_two_posts_are_two_orders()
     {
         var ana = await _fixture.CreateClientAsAsync("ana");
@@ -80,9 +115,14 @@ public class IdempotencyTests
     {
         var ana = await _fixture.CreateClientAsAsync("ana");
 
-        var res = await ana.SendAsync(Post(new CreateOrderRequest("Book", 1), Guid.NewGuid().ToString()));
+        var key = $"secret-{Guid.NewGuid():N}";
 
-        Assert.DoesNotContain("idempotency", (await res.Content.ReadAsStringAsync()).ToLowerInvariant());
+        var res = await ana.SendAsync(Post(new CreateOrderRequest("Book", 1), key));
+        var body = await res.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.Created, res.StatusCode);   // a real order, not an error page
+        Assert.DoesNotContain(key, body);                        // the value, under any field name
+        Assert.DoesNotContain("idempotency", body.ToLowerInvariant());
     }
 
     [Theory]
@@ -95,7 +135,9 @@ public class IdempotencyTests
         var res = await ana.SendAsync(Post(new CreateOrderRequest("Book", 1), key));
 
         Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
-        Assert.Contains("'Idempotency-Key' must be 1 to 100 characters.", await res.Content.ReadAsStringAsync());
+        var problem = await res.Content.ReadFromJsonAsync<Microsoft.AspNetCore.Http.HttpValidationProblemDetails>();
+        Assert.Equal(["'Idempotency-Key' must be 1 to 100 characters."], problem!.Errors["Idempotency-Key"]);
+        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._)).MustNotHaveHappened();
     }
 
     [Fact]

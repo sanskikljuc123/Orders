@@ -129,6 +129,10 @@ skill) -> `coverage-review` on the diff before the PR -> CI or nightly red -> `f
   Anything but a clear approval (HTTP error, unreadable body, unreachable, timeout after
   `Payment:TimeoutSeconds`, default 10) means not paid and is logged as a warning.
 - **Validation messages** are explicit English text, independent of the server culture.
+- **Startup:** outside Development the API refuses to start without `Auth:Authority`,
+  `Payment:BaseUrl` and `ConnectionStrings:ordersdb` (it would otherwise run without login, mark
+  orders Paid without charging, keep orders in memory). Development keeps those defaults.
+  Tests that start "Production" use `ApiInEnvironment` (all settings, the test PostgreSQL).
 - **Security gates:** every restore fails on a High/Critical NuGet advisory, direct or transitive
   (`Directory.Build.props`, NuGet audit); every build fails on a .NET security analyzer finding
   (`AnalysisModeSecurity=All`, analyzer warnings are errors; suppress only in code with a reason).
