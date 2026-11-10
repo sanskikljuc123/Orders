@@ -397,7 +397,7 @@ class Build : NukeBuild
         // --ignore-unfixed: a vulnerability without a released fix cannot be acted on and would
         // block every build; it is still listed by a manual `trivy image` run.
         var trivy = ToolResolver.GetTool(Trivy());
-        trivy($"image --severity HIGH,CRITICAL --ignore-unfixed --no-progress --exit-code 1 --cache-dir {RootDirectory / ".tools" / "trivy-cache"} {reference}");
+        trivy($"image --severity HIGH,CRITICAL --ignore-unfixed --no-progress --skip-version-check --exit-code 1 --cache-dir {RootDirectory / ".tools" / "trivy-cache"} {reference}");
         Serilog.Log.Information("Image {Image}: no fixable HIGH/CRITICAL vulnerabilities", reference);
     }
 

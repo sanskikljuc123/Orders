@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
+    <!-- Chiseled base image: no package manager, no shell, non-root. The full Ubuntu image shipped
+         apt with a fixable HIGH CVE that the Trivy gate (Images target) refused to push. -->
+    <ContainerFamily>noble-chiseled</ContainerFamily>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
