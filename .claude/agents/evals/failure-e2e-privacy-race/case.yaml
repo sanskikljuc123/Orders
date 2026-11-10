@@ -1,0 +1,8 @@
+schema_version: "1.1"
+name: failure-e2e-privacy-race
+expected_outcome: |
+  Classifies it as a test bug / flaky race, not a product bug: OrderPage.PlaceOrderAsync clicks "Place
+  order" and returns without waiting for the POST /orders response, and the next step reloads the page
+  (OpenMyOrdersAsync), which can cancel the request in flight so the order is never stored. Recommends
+  waiting for the POST response (and asserting it succeeded) before navigating, suggests proving it by
+  delaying the endpoint, and rejects retries or longer timeouts as the fix.

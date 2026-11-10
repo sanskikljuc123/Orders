@@ -1,0 +1,9 @@
+schema_version: "1.1"
+name: requirement-idempotency-key-reuse
+expected_outcome: |
+  Notices that at c1c674c a reused key with a different body silently returns the first order with
+  201. Extracts the business rule, the comparison (product and quantity, exact), the negative and
+  boundary cases, rates the risk HIGH (money / a client believing a new order was placed), proposes
+  unit tests in OrderService and an integration test for the status code, no charge and no stored row,
+  does not propose an E2E permutation, raises the status code (422 per the IETF draft vs 409/400) and
+  the UI behaviour as open questions or decisions, and notes the endpoint matrix and OpenAPI impact.

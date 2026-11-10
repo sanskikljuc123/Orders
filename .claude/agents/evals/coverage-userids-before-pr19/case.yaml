@@ -1,0 +1,7 @@
+schema_version: "1.1"
+name: coverage-userids-before-pr19
+expected_outcome: |
+  Finds that the branch where the principal has no identity at all (user.Identity is null, e.g. new
+  ClaimsPrincipal()) is never exercised: the existing anonymous test uses an empty ClaimsIdentity.
+  Proposes one small unit test for Name (and Get) with a principal without identity, rates it low or
+  medium, and does not propose integration or E2E tests for it.
