@@ -148,8 +148,10 @@ Run the app and the manual smoke check: [`README.md`](README.md).
 - **Stryker** silently exits with code 1 unless break <= low <= high.
 - **Coverage gate dropped** after new code: add the missing test, never lower the floor.
 - **Chart without passwords:** the generated chart's secrets are empty; Keycloak then exits
-  (code 2) and the realm Job times out. Every install must set them (DeploySmoke generates
-  throwaway ones; a real deploy passes them with `--set`, see `deploy/values.dev.yaml`).
+  (code 2) and the realm Job times out. `deploy/chart-extras/templates/required-secrets.yaml` now
+  stops any install/render without them (or with different Postgres/API passwords); the Helm
+  target checks that guard. DeploySmoke and Helm generate throwaway ones; a real deploy passes
+  them with `--set`, see `deploy/values.dev.yaml`.
 - **First NUKE run** can rewrite `build/_build.csproj`; check `git diff` and revert what you didn't intend.
 
 ## Cloud dev container (limitations)
@@ -168,5 +170,6 @@ Run the app and the manual smoke check: [`README.md`](README.md).
 - GHCR packages are private by default: make them public or give the cluster a pull secret.
 - One API replica only: sessions and idempotency locks are in-memory (a restart logs users out).
   A distributed L2 cache would lift this.
-- The chart has never been installed in a real cluster; `DeploySmoke` (nightly) is the first real install.
+- The chart installs and starts in a throwaway kind cluster (`DeploySmoke`, nightly, green since
+  2026-11-10) but has never run in a real cluster with TLS ingress, real domains and certificates.
 - The payment provider contract is an UNVERIFIED ASSUMPTION (`src/FakePaymentService/README.md`).

@@ -196,6 +196,15 @@ class Build : NukeBuild
     static string SmokePassword() =>
         Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
 
+    /// <summary>Random passwords for a throwaway install or render, in a values file (never on the command line).</summary>
+    AbsolutePath WriteThrowawaySecrets(string name)
+    {
+        var postgresPassword = SmokePassword();
+        var file = TemporaryDirectory / name;
+        file.WriteAllText($"secrets:\n  keycloak:\n    keycloak_password: \"{SmokePassword()}\"\n  postgres:\n    postgres_password: \"{postgresPassword}\"\n  api:\n    postgres_password: \"{postgresPassword}\"\n");
+        return file;
+    }
+
     [Parameter("kind cluster name for DeploySmoke")]
     readonly string SmokeCluster = "orders-smoke";
 
@@ -220,9 +229,7 @@ class Build : NukeBuild
                 // or CI). Without them Keycloak exits ("bootstrap-admin-username available only when
                 // bootstrap admin password is set") and the realm Job waits until the timeout.
                 // Throwaway passwords per run, in a values file so they never reach the command line.
-                var postgresPassword = SmokePassword();
-                var secrets = TemporaryDirectory / "smoke-secrets.yaml";
-                secrets.WriteAllText($"secrets:\n  keycloak:\n    keycloak_password: \"{SmokePassword()}\"\n  postgres:\n    postgres_password: \"{postgresPassword}\"\n  api:\n    postgres_password: \"{postgresPassword}\"\n");
+                var secrets = WriteThrowawaySecrets("smoke-secrets.yaml");
                 try
                 {
                     helm($"install orders {ChartDir} -f {values} -f {secrets} --set parameters.api.api_image=orders-api:{Version} --set parameters.payment.payment_image=orders-payment:{Version} --wait --timeout 10m");
@@ -304,8 +311,22 @@ class Build : NukeBuild
             var values = RootDirectory / "deploy" / $"values.{Environment}.yaml";
             Assert.FileExists(values);
             var helm = ToolResolver.GetPathTool("helm");
-            helm($"lint {ChartDir} -f {values}");
-            helm($"template orders {ChartDir} -f {values}", logOutput: false);
+
+            // The chart refuses to render without passwords (deploy/chart-extras/templates/required-secrets.yaml).
+            var refused = helm($"template orders {ChartDir} -f {values}", logOutput: false, exitHandler: _ => { });
+            Assert.True(refused.Any(o => o.Text.Contains("secrets.keycloak.keycloak_password is empty")),
+                "the chart rendered without passwords; required-secrets.yaml is missing or broken");
+
+            var secrets = WriteThrowawaySecrets("lint-secrets.yaml");
+            try
+            {
+                helm($"lint {ChartDir} -f {values} -f {secrets}");
+                helm($"template orders {ChartDir} -f {values} -f {secrets}", logOutput: false);
+            }
+            finally
+            {
+                secrets.DeleteFile();
+            }
         });
 
     Target Images => _ => _
