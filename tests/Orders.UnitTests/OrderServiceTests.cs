@@ -12,7 +12,8 @@ public class OrderServiceTests
     private readonly OrderStore _store = new();   // real, cheap collaborator
     private readonly IdempotencyLocks _locks = new();
 
-    private OrderService CreateSut() => new(_payment, _store, new FixedClock(Now), _locks);
+    private OrderService CreateSut() => new(_payment, _store, new FixedClock(Now), _locks,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<OrderService>.Instance);
 
     [Fact]
     public async Task Approved_payment_gives_Paid_order_for_the_user()
@@ -174,5 +175,109 @@ public class OrderServiceTests
         Assert.Single(placed.Select(p => p.Order.Id).Distinct());
         Assert.Equal(9, placed.Count(p => p.Replayed));
         Assert.Equal(0, _locks.Count);   // no lock left behind
+    }
+
+    // ---------- a paid order is never lost, a retry never charges twice ----------
+
+    private OrderService CreateSutWith(IOrderRepository repository) => new(_payment, repository, new FixedClock(Now), _locks,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<OrderService>.Instance);
+
+    /// <summary>The real in-memory store, with single calls made to fail on purpose.</summary>
+    private IOrderRepository StoreThat() => A.Fake<IOrderRepository>(o => o.Wrapping(_store));
+
+    [Fact]
+    public async Task Order_is_stored_as_Pending_before_it_is_charged()
+    {
+        string? statusWhileCharging = null;
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).ReturnsLazily((decimal _, Guid reference) =>
+        {
+            statusWhileCharging = _store.Find(reference)?.Status;
+            return Task.FromResult(true);
+        });
+
+        var placed = await CreateSut().PlaceOrderAsync(new CreateOrderRequest("Book", 1), "ana", "key-1");
+
+        Assert.Equal(OrderStatus.Pending, statusWhileCharging);   // stored, with the order id as reference
+        Assert.Equal(OrderStatus.Paid, (await _store.FindAsync(placed.Order.Id, "ana"))!.Status);
+    }
+
+    [Fact]
+    public async Task Failing_to_store_the_pending_order_charges_nothing()
+    {
+        var repository = StoreThat();
+        A.CallTo(() => repository.TryAddAsync(A<Order>._)).ThrowsAsync(new InvalidOperationException("database down"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            CreateSutWith(repository).PlaceOrderAsync(new CreateOrderRequest("Book", 1), "ana", "key-1"));
+
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustNotHaveHappened();
+        Assert.Empty(await _store.ListAsync("ana"));
+    }
+
+    [Fact]
+    public async Task Approved_charge_whose_status_cannot_be_saved_leaves_the_order_Pending_not_lost()
+    {
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).Returns(true);
+        var repository = StoreThat();
+        A.CallTo(() => repository.CompletePendingAsync(A<Guid>._, A<string>._)).ThrowsAsync(new InvalidOperationException("database down"));
+
+        var placed = await CreateSutWith(repository).PlaceOrderAsync(new CreateOrderRequest("Book", 2), "ana", "key-1");
+
+        Assert.Equal(PlaceOutcome.Pending, placed.Outcome);
+        Assert.Equal(OrderStatus.Pending, Assert.Single(await _store.ListAsync("ana")).Status);   // kept, never shown as Paid
+        A.CallTo(() => _payment.ChargeAsync(20m, placed.Order.Id)).MustHaveHappenedOnceExactly();
+    }
+
+    // FAKED: settling a Pending order by charging its reference again relies on provider-side
+    // idempotency, modelled on Stripe's public documentation for this example only
+    // (src/FakePaymentService/README.md). Here only the reference is checked; the contract tests
+    // prove the fake answers a repeated reference without a second charge.
+    [Fact]
+    public async Task Retrying_a_Pending_order_settles_it_with_the_same_payment_reference()
+    {
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).Returns(true);
+        var stuck = new Order(Guid.NewGuid(), "Book", 2, OrderStatus.Pending, "ana", Now, "key-1");
+        _store.Add(stuck);   // left Pending by a crash or a failed status update
+
+        var retried = await CreateSut().PlaceOrderAsync(new CreateOrderRequest("Book", 2), "ana", "key-1");
+
+        Assert.Equal(PlaceOutcome.Replayed, retried.Outcome);
+        Assert.Equal(stuck.Id, retried.Order.Id);
+        Assert.Equal(OrderStatus.Paid, retried.Order.Status);
+        Assert.Equal(OrderStatus.Paid, (await _store.FindAsync(stuck.Id, "ana"))!.Status);
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>.That.Not.IsEqualTo(stuck.Id))).MustNotHaveHappened();
+    }
+
+    [Fact]
+    public async Task Key_reserved_by_another_instance_is_not_charged_by_this_one()
+    {
+        var theirs = new Order(Guid.NewGuid(), "Book", 1, OrderStatus.Paid, "ana", Now, "key-1");
+        var repository = StoreThat();
+        // This instance looked before the other one stored its reservation...
+        A.CallTo(() => repository.FindByIdempotencyKeyAsync("ana", "key-1")).ReturnsNextFromSequence(null, theirs);
+        _store.Add(theirs);   // ...so the database refuses this instance's reservation.
+
+        var placed = await CreateSutWith(repository).PlaceOrderAsync(new CreateOrderRequest("Book", 1), "ana", "key-1");
+
+        Assert.Equal(PlaceOutcome.Replayed, placed.Outcome);
+        Assert.Equal(theirs.Id, placed.Order.Id);
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustNotHaveHappened();
+        Assert.Single(await _store.ListAsync("ana"));
+    }
+
+    [Fact]
+    public async Task Order_completed_elsewhere_keeps_that_result()
+    {
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).Returns(false);
+        var stuck = new Order(Guid.NewGuid(), "Book", 1, OrderStatus.Pending, "ana", Now, "key-1");
+        _store.Add(stuck);
+        var repository = StoreThat();
+        // Another instance completes it as Paid while this retry is charging.
+        A.CallTo(() => repository.CompletePendingAsync(stuck.Id, A<string>._)).Invokes(() => _store.Add(stuck with { Status = OrderStatus.Paid }))
+            .ReturnsLazily(() => Task.FromResult(false));
+
+        var retried = await CreateSutWith(repository).PlaceOrderAsync(new CreateOrderRequest("Book", 1), "ana", "key-1");
+
+        Assert.Equal(OrderStatus.Paid, retried.Order.Status);   // the stored result, not this retry's
     }
 }
