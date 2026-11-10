@@ -50,4 +50,14 @@ public class UserIdsTests
     [Fact]
     public void Name_of_an_unauthenticated_user_is_anonymous()
         => Assert.Equal("anonymous", UserIds.Name(new ClaimsPrincipal(new ClaimsIdentity())));
+
+    [Fact]
+    public void Principal_without_any_identity_is_anonymous()
+    {
+        // No identity at all (Identity is null), not just an unauthenticated one.
+        var nobody = new ClaimsPrincipal();
+
+        Assert.Equal("anonymous", UserIds.Name(nobody));
+        Assert.Equal("anonymous", UserIds.Get(nobody));
+    }
 }
