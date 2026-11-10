@@ -123,6 +123,13 @@ GitVersion | NUKE (build) | Helm + Kubernetes (deploy via `aspire publish` + `he
   `TestResults/mutation/*/reports/`. Stryker rejects thresholds unless break <= low <= high.
   Known surviving mutants (SessionStore expiry boundary and cache duration) are not observable:
   the cookie handler checks expiry itself.
+- Test order is random (unit, contract, integration; `tests/TestSupport/RandomTestOrder.cs`). The
+  seed is printed ("Random test order seed: N"); replay a failing order with `TEST_ORDER_SEED=N`.
+- Flaky / order-dependent tests: `./build.sh --target Stability --repeat 3 [--stability-projects ...]`
+  runs each project N times in a new order and lists tests that failed in some runs
+  (`TestResults/stability-summary.md`). With Orders.E2E, run `InstallBrowser` first. Nightly
+  (`.github/workflows/ci-nightly.yml`) runs Stability for all four projects plus Mutation.
+- Every test target writes passed/failed/skipped and failed test names to the GitHub job summary.
 - Tests: `dotnet test`
 - Playwright browsers: `pwsh tests/Orders.E2E/bin/Debug/net10.0/playwright.ps1 install`
 - Unit: `dotnet test tests/Orders.UnitTests` | Integration (Docker): `dotnet test tests/Orders.IntegrationTests`

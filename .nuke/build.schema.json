@@ -36,6 +36,7 @@
         "Mutation",
         "Publish",
         "Restore",
+        "Stability",
         "Test",
         "UnitTests"
       ]
@@ -131,6 +132,18 @@
         "PushImages": {
           "type": "boolean",
           "description": "Push container images to ghcr.io (CI sets this on pushes to main only)"
+        },
+        "Repeat": {
+          "type": "integer",
+          "description": "How many times Stability runs each test project",
+          "format": "int32"
+        },
+        "StabilityProjects": {
+          "type": "array",
+          "description": "Test projects for Stability (default: all four)",
+          "items": {
+            "type": "string"
+          }
         },
         "TotalBranchFloor": {
           "type": "number",

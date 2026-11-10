@@ -137,8 +137,60 @@ class Build : NukeBuild
                 Check(cls, coverage.ByClass[cls], CriticalBranchFloor);
             }
 
-            WriteSummary(summary.ToString());
+            WriteSummary(summary.ToString(), "coverage-summary.md");
             Assert.True(failures.Count == 0, string.Join("; ", failures));
+        });
+
+    [Parameter("How many times Stability runs each test project")]
+    readonly int Repeat = 3;
+
+    [Parameter("Test projects for Stability (default: all four)")]
+    readonly string[] StabilityProjects = { "Orders.UnitTests", "Orders.ContractTests", "Orders.IntegrationTests", "Orders.E2E" };
+
+    // With Orders.E2E in StabilityProjects, run InstallBrowser first (ci-nightly.yml does).
+    Target Stability => _ => _
+        .DependsOn(Compile)
+        .After(InstallBrowser)
+        .Executes(() =>
+        {
+            // Runs each project several times, each time in a new random order (TestSupport), and
+            // reports every test that failed in some runs: flaky or order-dependent. Nightly.
+            var failures = new Dictionary<string, int>();
+            foreach (var project in StabilityProjects)
+                for (var run = 1; run <= Repeat; run++)
+                {
+                    var results = ResultsDir / "stability" / project / $"run-{run}";
+                    results.CreateOrCleanDirectory();
+                    try
+                    {
+                        DotNetTest(s => s
+                            .SetProjectFile(RootDirectory / "tests" / project)
+                            .SetConfiguration(Configuration)
+                            .EnableNoBuild()
+                            .SetLoggers("trx")
+                            .SetResultsDirectory(results));
+                    }
+                    catch (ProcessException)
+                    {
+                        // Recorded below from the .trx; keep going so every run is counted.
+                    }
+                    var trx = ReadTrx(results);
+                    Assert.True(trx.Total > 0, $"{project} run {run} produced no test results");
+                    foreach (var name in trx.FailedTests)
+                        failures[$"{project}: {name}"] = failures.GetValueOrDefault($"{project}: {name}") + 1;
+                }
+
+            var summary = new System.Text.StringBuilder($"## Stability: {Repeat} runs per project, random order each run\n\n");
+            if (failures.Count == 0)
+                summary.Append("No test failed in any run.\n");
+            else
+            {
+                summary.Append("| Test | Failed runs | Verdict |\n|---|---|---|\n");
+                foreach (var (test, count) in failures.OrderByDescending(f => f.Value))
+                    summary.Append($"| `{test}` | {count}/{Repeat} | {(count == Repeat ? "broken" : "FLAKY or order-dependent")} |\n");
+            }
+            WriteSummary(summary.ToString(), "stability-summary.md");
+            Assert.True(failures.Count == 0, $"{failures.Count} test(s) failed in at least one run, see TestResults/stability-summary.md");
         });
 
     Target Mutation => _ => _
@@ -217,15 +269,52 @@ class Build : NukeBuild
     {
         var results = ResultsDir / project;
         results.CreateOrCleanDirectory();
-        DotNetTest(s => s
-            .SetProjectFile(RootDirectory / "tests" / project)
-            .SetConfiguration(Configuration)
-            .EnableNoBuild()
-            .SetLoggers("trx")
-            .SetResultsDirectory(results)
-            .When(_ => coverage, x => x
-                .SetDataCollector("XPlat Code Coverage")
-                .SetSettingsFile(RootDirectory / "coverlet.runsettings")));
+        try
+        {
+            DotNetTest(s => s
+                .SetProjectFile(RootDirectory / "tests" / project)
+                .SetConfiguration(Configuration)
+                .EnableNoBuild()
+                .SetLoggers("trx")
+                .SetResultsDirectory(results)
+                .When(_ => coverage, x => x
+                    .SetDataCollector("XPlat Code Coverage")
+                    .SetSettingsFile(RootDirectory / "coverlet.runsettings")));
+        }
+        finally
+        {
+            WriteSummary(TestSummary(project, results));   // also (especially) when tests failed
+        }
+    }
+
+    record TrxResult(int Total, int Passed, int Failed, int Skipped, List<string> FailedTests);
+
+    static TrxResult ReadTrx(AbsolutePath dir)
+    {
+        XNamespace ns = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010";
+        var (total, passed, failed, skipped, names) = (0, 0, 0, 0, new List<string>());
+        foreach (var trx in dir.GlobFiles("*.trx"))
+        {
+            var doc = XDocument.Load(trx);
+            var counters = doc.Descendants(ns + "Counters").Single();
+            int Read(string name) => int.Parse(counters.Attribute(name)!.Value, CultureInfo.InvariantCulture);
+            total += Read("total"); passed += Read("passed"); failed += Read("failed");
+            skipped += Read("notExecuted");
+            names.AddRange(doc.Descendants(ns + "UnitTestResult")
+                .Where(r => r.Attribute("outcome")?.Value == "Failed")
+                .Select(r => r.Attribute("testName")!.Value));
+        }
+        return new(total, passed, failed, skipped, names);
+    }
+
+    static string TestSummary(string project, AbsolutePath results)
+    {
+        var r = ReadTrx(results);
+        var status = r.Total == 0 ? "no results" : r.Failed == 0 ? "passed" : "FAILED";
+        var text = $"### {project}: {status}\n\n{r.Passed} passed, {r.Failed} failed, {r.Skipped} skipped (of {r.Total})\n";
+        foreach (var name in r.FailedTests.Take(50))
+            text += $"- FAILED: `{name}`\n";
+        return text;
     }
 
     record CoverageCount(int LinesCovered, int LinesTotal, int BranchesCovered, int BranchesTotal)
@@ -280,9 +369,9 @@ class Build : NukeBuild
     }
 
     /// <summary>Saves a Markdown summary and, on GitHub Actions, adds it to the job summary page.</summary>
-    void WriteSummary(string markdown)
+    void WriteSummary(string markdown, string file = null)   // build project has nullable disabled
     {
-        (ResultsDir / "coverage-summary.md").WriteAllText(markdown);
+        if (file is not null) (ResultsDir / file).WriteAllText(markdown);
         var jobSummary = System.Environment.GetEnvironmentVariable("GITHUB_STEP_SUMMARY");
         if (!string.IsNullOrEmpty(jobSummary))
             System.IO.File.AppendAllText(jobSummary, markdown + "\n");
