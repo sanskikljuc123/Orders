@@ -60,7 +60,7 @@ public class OrdersApiTests : IClassFixture<OrdersApiFactory>
     {
         await _client.PostAsJsonAsync("/orders", new CreateOrderRequest($"Book-{Guid.NewGuid():N}", 3));
 
-        A.CallTo(() => _factory.Payment.ChargeAsync(30m)).MustHaveHappenedOnceExactly();
+        A.CallTo(() => _factory.Payment.ChargeAsync(30m, A<Guid>._)).MustHaveHappenedOnceExactly();
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public class OrdersApiTests : IClassFixture<OrdersApiFactory>
         var problem = await res.Content.ReadFromJsonAsync<HttpValidationProblemDetails>();
         Assert.Equal(["'Product Name' must not be empty."], problem!.Errors["ProductName"]);
         Assert.Equal(["'Quantity' must be between 1 and 100. You entered 0."], problem.Errors["Quantity"]);
-        A.CallTo(() => _factory.Payment.ChargeAsync(A<decimal>._)).MustNotHaveHappened();
+        A.CallTo(() => _factory.Payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustNotHaveHappened();
     }
 
     [Fact]
@@ -92,7 +92,7 @@ public class OrdersApiTests : IClassFixture<OrdersApiFactory>
         var res = await _client.PostAsync("/orders", new StringContent(body, System.Text.Encoding.UTF8, contentType));
 
         Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
-        A.CallTo(() => _factory.Payment.ChargeAsync(A<decimal>._)).MustNotHaveHappened();
+        A.CallTo(() => _factory.Payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustNotHaveHappened();
     }
 
     [Fact]
@@ -102,7 +102,7 @@ public class OrdersApiTests : IClassFixture<OrdersApiFactory>
             new StringContent("{\"productName\": \"Book\", \"quantity\": 1}", System.Text.Encoding.UTF8, "text/plain"));
 
         Assert.Equal(HttpStatusCode.UnsupportedMediaType, res.StatusCode);
-        A.CallTo(() => _factory.Payment.ChargeAsync(A<decimal>._)).MustNotHaveHappened();
+        A.CallTo(() => _factory.Payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustNotHaveHappened();
     }
 
     [Fact]

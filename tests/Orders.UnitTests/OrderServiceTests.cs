@@ -17,7 +17,7 @@ public class OrderServiceTests
     [Fact]
     public async Task Approved_payment_gives_Paid_order_for_the_user()
     {
-        A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).Returns(true);
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).Returns(true);
 
         var order = (await CreateSut().PlaceOrderAsync(new CreateOrderRequest("Book", 2), "ana")).Order;
 
@@ -30,7 +30,7 @@ public class OrderServiceTests
     [Fact]
     public async Task Declined_payment_gives_PaymentFailed_order()
     {
-        A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).Returns(false);
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).Returns(false);
 
         var order = (await CreateSut().PlaceOrderAsync(new CreateOrderRequest("Book", 2), "ana")).Order;
 
@@ -43,17 +43,17 @@ public class OrderServiceTests
     [InlineData(100, 1000)]
     public async Task Charges_10_per_item(int quantity, int expectedAmount)
     {
-        A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).Returns(true);
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).Returns(true);
 
         await CreateSut().PlaceOrderAsync(new CreateOrderRequest("Book", quantity), "ana");
 
-        A.CallTo(() => _payment.ChargeAsync((decimal)expectedAmount)).MustHaveHappenedOnceExactly();
+        A.CallTo(() => _payment.ChargeAsync((decimal)expectedAmount, A<Guid>._)).MustHaveHappenedOnceExactly();
     }
 
     [Fact]
     public async Task Declined_order_is_still_saved_for_the_user()
     {
-        A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).Returns(false);
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).Returns(false);
 
         var order = (await CreateSut().PlaceOrderAsync(new CreateOrderRequest("Book", 1), "ana")).Order;
 
@@ -65,7 +65,7 @@ public class OrderServiceTests
     [Fact]
     public async Task Order_gets_the_current_time()
     {
-        A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).Returns(true);
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).Returns(true);
 
         var placed = await CreateSut().PlaceOrderAsync(new CreateOrderRequest("Book", 1), "ana");
 
@@ -77,7 +77,7 @@ public class OrderServiceTests
     [Fact]
     public async Task Repeating_a_request_with_the_same_key_returns_the_first_order_and_charges_once()
     {
-        A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).Returns(true);
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).Returns(true);
         var sut = CreateSut();
 
         var first = await sut.PlaceOrderAsync(new CreateOrderRequest("Book", 2), "ana", "key-1");
@@ -86,7 +86,7 @@ public class OrderServiceTests
         Assert.False(first.Replayed);
         Assert.True(again.Replayed);
         Assert.Equal(first.Order.Id, again.Order.Id);
-        A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).MustHaveHappenedOnceExactly();
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustHaveHappenedOnceExactly();
         Assert.Single(await _store.ListAsync("ana"));
     }
 
@@ -96,7 +96,7 @@ public class OrderServiceTests
     [InlineData("book", 2)]   // product names are compared exactly
     public async Task Reusing_a_key_for_a_different_order_is_rejected_without_charging(string product, int quantity)
     {
-        A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).Returns(true);
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).Returns(true);
         var sut = CreateSut();
         var first = await sut.PlaceOrderAsync(new CreateOrderRequest("Book", 2), "ana", "key-1");
 
@@ -106,27 +106,27 @@ public class OrderServiceTests
         Assert.Equal(PlaceOutcome.KeyUsedForDifferentOrder, reused.Outcome);
         Assert.False(reused.Replayed);
         Assert.Equal(first.Order.Id, reused.Order.Id);   // the order the key belongs to
-        A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).MustHaveHappenedOnceExactly();
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustHaveHappenedOnceExactly();
         Assert.Single(await _store.ListAsync("ana"));
     }
 
     [Fact]
     public async Task Different_keys_are_different_orders()
     {
-        A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).Returns(true);
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).Returns(true);
         var sut = CreateSut();
 
         var a = await sut.PlaceOrderAsync(new CreateOrderRequest("Book", 1), "ana", "key-1");
         var b = await sut.PlaceOrderAsync(new CreateOrderRequest("Book", 1), "ana", "key-2");
 
         Assert.NotEqual(a.Order.Id, b.Order.Id);
-        A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).MustHaveHappenedTwiceExactly();
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustHaveHappenedTwiceExactly();
     }
 
     [Fact]
     public async Task Without_a_key_every_request_is_a_new_order()
     {
-        A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).Returns(true);
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).Returns(true);
         var sut = CreateSut();
 
         var first = await sut.PlaceOrderAsync(new CreateOrderRequest("Book", 1), "ana");
@@ -135,13 +135,13 @@ public class OrderServiceTests
         Assert.False(first.Replayed);
         Assert.False(second.Replayed);
         Assert.NotEqual(first.Order.Id, second.Order.Id);
-        A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).MustHaveHappenedTwiceExactly();
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustHaveHappenedTwiceExactly();
     }
 
     [Fact]
     public async Task The_same_key_from_another_user_is_their_own_order()
     {
-        A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).Returns(true);
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).Returns(true);
         var sut = CreateSut();
 
         var ana = await sut.PlaceOrderAsync(new CreateOrderRequest("Book", 1), "ana", "key-1");
@@ -157,7 +157,7 @@ public class OrderServiceTests
     {
         // A slow provider keeps the first request inside the charge while the others arrive.
         var charging = new TaskCompletionSource();
-        A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).ReturnsLazily(async () => { await charging.Task; return true; });
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).ReturnsLazily(async () => { await charging.Task; return true; });
         var sut = CreateSut();
 
         var requests = Enumerable.Range(0, 10)
@@ -170,7 +170,7 @@ public class OrderServiceTests
         Assert.True(allQueued, "all 10 requests should wait on the same per-user, per-key lock");
         var placed = await Task.WhenAll(requests);
 
-        A.CallTo(() => _payment.ChargeAsync(A<decimal>._)).MustHaveHappenedOnceExactly();
+        A.CallTo(() => _payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustHaveHappenedOnceExactly();
         Assert.Single(placed.Select(p => p.Order.Id).Distinct());
         Assert.Equal(9, placed.Count(p => p.Replayed));
         Assert.Equal(0, _locks.Count);   // no lock left behind

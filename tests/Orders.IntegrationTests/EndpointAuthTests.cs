@@ -74,7 +74,7 @@ public class EndpointAuthTests
         Assert.True(accepted.Count == 0,
             "Endpoints reachable without a login (add RequireAuthorization, or add them to Public on purpose):\n"
             + string.Join("\n", accepted));
-        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._)).MustNotHaveHappened();
+        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustNotHaveHappened();
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public class EndpointAuthTests
         var res = await _fixture.CreateClient().PostAsJsonAsync("/orders", new CreateOrderRequest("Book", 1));
 
         Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
-        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._)).MustNotHaveHappened();
+        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustNotHaveHappened();
     }
 
     [Fact]

@@ -28,14 +28,14 @@ public class PaymentContractTests : IClassFixture<WebApplicationFactory<Program>
 
     [Fact]
     public async Task Approve_mode_is_understood_as_paid()
-        => Assert.True(await RealClient().ChargeAsync(20m));
+        => Assert.True(await RealClient().ChargeAsync(20m, Guid.NewGuid()));
 
     [Fact]
     public async Task Decline_mode_is_understood_as_not_paid()
     {
         await SetModeAsync("decline");
 
-        Assert.False(await RealClient().ChargeAsync(20m));
+        Assert.False(await RealClient().ChargeAsync(20m, Guid.NewGuid()));
     }
 
     [Fact]
@@ -43,7 +43,7 @@ public class PaymentContractTests : IClassFixture<WebApplicationFactory<Program>
     {
         await SetModeAsync("error");
 
-        Assert.False(await RealClient().ChargeAsync(20m));
+        Assert.False(await RealClient().ChargeAsync(20m, Guid.NewGuid()));
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public class PaymentContractTests : IClassFixture<WebApplicationFactory<Program>
 
         (await _fake.CreateClient().PostAsync("/__admin/reset", null)).EnsureSuccessStatusCode();
 
-        Assert.True(await RealClient().ChargeAsync(20m));
+        Assert.True(await RealClient().ChargeAsync(20m, Guid.NewGuid()));
     }
 
     [Fact]
@@ -74,5 +74,65 @@ public class PaymentContractTests : IClassFixture<WebApplicationFactory<Program>
         res.EnsureSuccessStatusCode();
         Assert.Equal("application/json", res.Content.Headers.ContentType!.MediaType);
         Assert.Equal(new ChargeResponse(true), await res.Content.ReadFromJsonAsync<ChargeResponse>());
+    }
+
+    // ---------- provider-side idempotency ----------
+    // FAKED: provider-side idempotency is not part of any verified provider contract. It is modelled
+    // on Stripe's public documentation for this example only (src/FakePaymentService/README.md).
+    // These tests prove our client and the fake agree on it, not that a real provider behaves so.
+
+    private async Task<int> ChargesAsync() =>
+        (await _fake.CreateClient().GetFromJsonAsync<System.Text.Json.JsonElement>("/__admin/charges")).GetProperty("count").GetInt32();
+
+    [Fact]
+    public async Task FAKED_charging_the_same_reference_twice_charges_once_and_returns_the_first_answer()
+    {
+        var reference = Guid.NewGuid();
+
+        var first = await RealClient().ChargeAsync(20m, reference);
+        var again = await RealClient().ChargeAsync(20m, reference);
+
+        Assert.True(first);
+        Assert.True(again);
+        Assert.Equal(1, await ChargesAsync());
+    }
+
+    [Fact]
+    public async Task FAKED_a_stored_decline_is_replayed_even_after_the_provider_would_approve()
+    {
+        var reference = Guid.NewGuid();
+        await SetModeAsync("decline");
+        var first = await RealClient().ChargeAsync(20m, reference);
+
+        await SetModeAsync("approve");
+        var again = await RealClient().ChargeAsync(20m, reference);
+
+        Assert.False(first);
+        Assert.False(again);   // the first answer for the reference, not a new charge
+        Assert.Equal(1, await ChargesAsync());
+    }
+
+    [Fact]
+    public async Task FAKED_a_provider_error_is_not_stored_so_a_retry_with_the_same_reference_is_charged()
+    {
+        var reference = Guid.NewGuid();
+        await SetModeAsync("error");
+        var failed = await RealClient().ChargeAsync(20m, reference);
+
+        await SetModeAsync("approve");
+        var retried = await RealClient().ChargeAsync(20m, reference);
+
+        Assert.False(failed);
+        Assert.True(retried);
+        Assert.Equal(1, await ChargesAsync());
+    }
+
+    [Fact]
+    public async Task FAKED_different_references_are_separate_charges()
+    {
+        Assert.True(await RealClient().ChargeAsync(20m, Guid.NewGuid()));
+        Assert.True(await RealClient().ChargeAsync(20m, Guid.NewGuid()));
+
+        Assert.Equal(2, await ChargesAsync());
     }
 }

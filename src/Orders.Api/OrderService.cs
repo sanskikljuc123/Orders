@@ -39,8 +39,9 @@ public class OrderService(IPaymentClient payment, IOrderRepository orders, TimeP
 
     private async Task<Order> ChargeAndStoreAsync(CreateOrderRequest req, string userId, string? idempotencyKey)
     {
-        var paid = await payment.ChargeAsync(req.Quantity * 10m);
-        var order = new Order(Guid.NewGuid(), req.ProductName, req.Quantity,
+        var id = Guid.NewGuid();
+        var paid = await payment.ChargeAsync(req.Quantity * 10m, id);   // the order id is the payment reference
+        var order = new Order(id, req.ProductName, req.Quantity,
             paid ? "Paid" : "PaymentFailed", userId, clock.GetUtcNow(), idempotencyKey);
         await orders.AddAsync(order);
         return order;

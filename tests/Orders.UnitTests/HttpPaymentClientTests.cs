@@ -48,16 +48,29 @@ public class HttpPaymentClientTests
     {
         var provider = Answering(HttpStatusCode.OK, """{"approved":true}""");
 
-        await Client(provider).ChargeAsync(30m);
+        await Client(provider).ChargeAsync(30m, Guid.NewGuid());
 
         Assert.Equal(HttpMethod.Post, provider.LastRequest!.Method);
         Assert.Equal("/charge", provider.LastRequest.RequestUri!.AbsolutePath);
         Assert.Equal(30m, JsonDocument.Parse(provider.LastBody!).RootElement.GetProperty("amount").GetDecimal());
     }
 
+    // FAKED: the provider-side idempotency key is modelled on Stripe's public documentation for this
+    // example only; no verified provider contract has it (src/FakePaymentService/README.md).
+    [Fact]
+    public async Task FAKED_sends_the_order_reference_as_the_Idempotency_Key_header()
+    {
+        var provider = Answering(HttpStatusCode.OK, """{"approved":true}""");
+        var reference = Guid.NewGuid();
+
+        await Client(provider).ChargeAsync(30m, reference);
+
+        Assert.Equal(reference.ToString(), Assert.Single(provider.LastRequest!.Headers.GetValues("Idempotency-Key")));
+    }
+
     [Fact]
     public async Task Approved_answer_means_paid()
-        => Assert.True(await Client(Answering(HttpStatusCode.OK, """{"approved":true}""")).ChargeAsync(10m));
+        => Assert.True(await Client(Answering(HttpStatusCode.OK, """{"approved":true}""")).ChargeAsync(10m, Guid.NewGuid()));
 
     [Theory]
     [InlineData(HttpStatusCode.OK, """{"approved":false}""", "declined")]
@@ -68,14 +81,14 @@ public class HttpPaymentClientTests
     [InlineData(HttpStatusCode.ServiceUnavailable, "", "provider unavailable")]
     [InlineData(HttpStatusCode.BadRequest, """{"approved":true}""", "error status wins over body")]
     public async Task Anything_but_a_clear_approval_means_not_paid(HttpStatusCode status, string body, string because)
-        => Assert.False(await Client(Answering(status, body)).ChargeAsync(10m), because);
+        => Assert.False(await Client(Answering(status, body)).ChargeAsync(10m, Guid.NewGuid()), because);
 
     [Fact]
     public async Task Unreachable_provider_means_not_paid_instead_of_an_error()
     {
         var provider = new StubProvider((_, _) => throw new HttpRequestException("connection refused"));
 
-        Assert.False(await Client(provider).ChargeAsync(10m));
+        Assert.False(await Client(provider).ChargeAsync(10m, Guid.NewGuid()));
     }
 
     [Fact]
@@ -84,7 +97,7 @@ public class HttpPaymentClientTests
         // Never answers; the client's own timeout must end the call.
         var provider = new StubProvider(async (_, ct) => { await Task.Delay(Timeout.Infinite, ct); return null!; });
 
-        var paid = await Client(provider, timeout: TimeSpan.FromMilliseconds(200)).ChargeAsync(10m);
+        var paid = await Client(provider, timeout: TimeSpan.FromMilliseconds(200)).ChargeAsync(10m, Guid.NewGuid());
 
         Assert.False(paid);
     }
@@ -111,7 +124,7 @@ public class HttpPaymentClientTests
     {
         var log = new RecordingLogger();
 
-        await Client(ProviderThatFailsWith(reason), TimeSpan.FromMilliseconds(200), log).ChargeAsync(10m);
+        await Client(ProviderThatFailsWith(reason), TimeSpan.FromMilliseconds(200), log).ChargeAsync(10m, Guid.NewGuid());
 
         var entry = Assert.Single(log.Entries);
         Assert.Equal(LogLevel.Warning, entry.Level);
@@ -124,7 +137,7 @@ public class HttpPaymentClientTests
     {
         var log = new RecordingLogger();
 
-        await Client(Answering(HttpStatusCode.OK, """{"approved":true}"""), log: log).ChargeAsync(10m);
+        await Client(Answering(HttpStatusCode.OK, """{"approved":true}"""), log: log).ChargeAsync(10m, Guid.NewGuid());
 
         Assert.Empty(log.Entries);
     }

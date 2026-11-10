@@ -275,7 +275,7 @@ public static class UserIds
 
 public class AlwaysApprovedPaymentClient : IPaymentClient
 {
-    public Task<bool> ChargeAsync(decimal amount) => Task.FromResult(true);
+    public Task<bool> ChargeAsync(decimal amount, Guid reference) => Task.FromResult(true);
 }
 
 // Lets WebApplicationFactory<Program> in tests/Orders.IntegrationTests reach the top-level Program.

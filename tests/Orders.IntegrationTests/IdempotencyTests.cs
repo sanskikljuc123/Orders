@@ -43,7 +43,7 @@ public class IdempotencyTests
         var b = (await again.Content.ReadFromJsonAsync<Order>())!;
         Assert.Equal(a.Id, b.Id);
         Assert.Equal(1, await RowsWithProductAsync(product));
-        A.CallTo(() => _fixture.Payment.ChargeAsync(20m)).MustHaveHappenedOnceExactly();
+        A.CallTo(() => _fixture.Payment.ChargeAsync(20m, A<Guid>._)).MustHaveHappenedOnceExactly();
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public class IdempotencyTests
         Assert.Equal(HttpStatusCode.UnprocessableEntity, reused.StatusCode);
         Assert.Contains("'Idempotency-Key' was already used for a different order.", await reused.Content.ReadAsStringAsync());
         Assert.False(reused.Headers.Contains("Idempotent-Replayed"));
-        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._)).MustHaveHappenedOnceExactly();   // the first order only
+        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustHaveHappenedOnceExactly();   // the first order only
         Assert.Equal(1, await RowsWithProductAsync(product));
     }
 
@@ -72,7 +72,7 @@ public class IdempotencyTests
         var key = Guid.NewGuid().ToString();
         var product = $"Book-{Guid.NewGuid():N}";
         var charging = new TaskCompletionSource();
-        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._)).ReturnsLazily(async () => { await charging.Task; return true; });
+        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._, A<Guid>._)).ReturnsLazily(async () => { await charging.Task; return true; });
         var locks = _fixture.Services.GetRequiredService<IdempotencyLocks>();
         var lockKey = $"{SubjectOf(ana)}\n{key}";
 
@@ -82,7 +82,7 @@ public class IdempotencyTests
         charging.SetResult();
         var responses = await Task.WhenAll(requests);
 
-        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._)).MustHaveHappenedOnceExactly();
+        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustHaveHappenedOnceExactly();
         Assert.All(responses, r => Assert.Equal(HttpStatusCode.Created, r.StatusCode));
         var ids = await Task.WhenAll(responses.Select(async r => (await r.Content.ReadFromJsonAsync<Order>())!.Id));
         Assert.Single(ids.Distinct());
@@ -137,7 +137,7 @@ public class IdempotencyTests
         Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
         var problem = await res.Content.ReadFromJsonAsync<Microsoft.AspNetCore.Http.HttpValidationProblemDetails>();
         Assert.Equal(["'Idempotency-Key' must be 1 to 100 characters."], problem!.Errors["Idempotency-Key"]);
-        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._)).MustNotHaveHappened();
+        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustNotHaveHappened();
     }
 
     [Fact]
@@ -159,7 +159,7 @@ public class IdempotencyTests
 
         Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
         Assert.Contains("'Idempotency-Key' must be 1 to 100 characters.", await res.Content.ReadAsStringAsync());
-        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._)).MustNotHaveHappened();
+        A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustNotHaveHappened();
     }
 
     [Fact]
