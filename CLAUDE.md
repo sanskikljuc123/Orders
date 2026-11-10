@@ -55,9 +55,13 @@ One responsibility each; they analyse and report, they never edit files, commit 
   requirements, missing scenarios, weak/redundant/flaky tests, automation opportunities, regression suites.
 - `failure-analysis` (may run tests, read CI logs): classification, root cause with evidence,
   reproduction, bug report.
+- `pr-review` (may run tests): before a PR, what CI cannot judge: tests for every changed
+  behaviour, nothing weakened, docs/contract in sync, no secrets or attribution, an honest
+  description -> READY / NOT READY. Used by the `pr-ready` skill (`/pr-ready`).
 
 **Workflow:** new or changed behaviour -> `requirement-analysis` -> write the tests (`test-setup`
-skill) -> `coverage-review` on the diff before the PR -> CI or nightly red -> `failure-analysis`.
+skill) -> `coverage-review` on the diff -> `/pr-ready` (gates, `pr-review`, then push after an OK)
+-> CI or nightly red -> `failure-analysis`.
 
 **Shared rules (all three agents apply these; this is the only copy):**
 - Prioritise by 1. user impact, 2. business impact (money, lost orders), 3. security impact,

@@ -278,6 +278,14 @@ public async Task SignedInAs(string user) => await sb.OpenAsync(await TestEnviro
 - Playwright .NET has no soft assertions; for several independent checks, use separate `Then`
   steps (each failure is reported with its step) or split the scenario.
 - For non-UI checks inside a step (status codes), `Assert.Equal(expected, actual)` with values.
+- **Wait for the request before the next step navigates.** A step that clicks "Place order" and
+  returns lets the next step's reload cancel the request in flight (flaky, order lost). Wrap the
+  click: `page.RunAndWaitForResponseAsync(() => button.ClickAsync(), r => r.Url.EndsWith("/orders")
+  && r.Request.Method == "POST")` and assert its status. Reproduce such races deterministically by
+  delaying the endpoint, not by re-running.
+- **Server outcomes the real stack can't produce on demand** (202 Pending, 503): stub only the
+  first answer in the browser (`Page.RouteAsync` + `FallbackAsync` for the rest) and let the retry
+  reach the real system; cover the server side in integration tests.
 
 ## 8. Failure artifacts and debugging
 
