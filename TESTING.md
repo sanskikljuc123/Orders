@@ -2,7 +2,7 @@
 
 What could go wrong in production, and which tests would catch it. Use it to spot gaps: a risk
 with no test, or a risk tested only at one slow level. When you add a behaviour or a test, update
-the row. How to run each layer and the quality gates: [`CLAUDE.md`](CLAUDE.md#commands-fill-in-as-they-are-verified).
+the row. How to run each layer and the quality gates: [`CLAUDE.md`](CLAUDE.md#commands).
 
 Layers: **U** unit (`tests/Orders.UnitTests`), **C** contract (`tests/Orders.ContractTests`),
 **I** integration (`tests/Orders.IntegrationTests`, Docker), **E** E2E (`tests/Orders.E2E`, Docker +

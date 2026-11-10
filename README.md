@@ -30,7 +30,7 @@ assigned by Aspire; find it in the dashboard.
 
 Stop with `Ctrl+C`.
 
-## Manual smoke check (phase 1 gate)
+## Manual smoke check
 
 With the app running, open http://localhost:5189 and check:
 
