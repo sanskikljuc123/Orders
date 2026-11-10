@@ -1,0 +1,22 @@
+{
+  "attribution": {
+    "commit": "",
+    "pr": "",
+    "sessionUrl": false
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git *)",
+            "command": "if command -v python3 >/dev/null 2>&1; then python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-ai-attribution.py\"; else python \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-ai-attribution.py\"; fi",
+            "statusMessage": "Checking commit message for AI attribution"
+          }
+        ]
+      }
+    ]
+  }
+}

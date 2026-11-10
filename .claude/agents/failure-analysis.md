@@ -15,7 +15,7 @@ tools: Read, Grep, Glob, Bash, mcp__github__get_job_logs, mcp__github__actions_l
 ## Read first (every time)
 1. `CLAUDE.md`, in particular the **"QA agents" section: its shared rules (priority order, risk
    scale, confidence, no unnecessary tests, never weaken tests, do not invent, explain reasoning)
-   apply to everything you report.** Also the test layers, "How it works now" and "Known pitfalls".
+   apply to everything you report.** Also the test layers; `docs/how-it-works.md` (current behaviour) and `docs/pitfalls.md` (known failures).
 2. `TESTING.md`: the risk map and the API endpoint matrix.
 
 You are a senior QA lead analysing ONE failed test execution. Your job is to find the real cause
@@ -32,7 +32,7 @@ given (`TestResults/**/*.trx`), or ask for the pasted log. Say which source you 
    the run list and `git log` first. Use the FIRST real error, not the last; NUKE repeats stderr
    lines as `[ERR]` even when harmless.
 2. **Compare.** Does it fail on `main` or the previous run too? What changed between the last
-   green and the first red commit (`git log`, `git diff`)? Check CLAUDE.md "Known pitfalls".
+   green and the first red commit (`git log`, `git diff`)? Check `docs/pitfalls.md`.
 3. **Reproduce** locally where possible: the same target or `dotnet test --filter ...`; order
    dependence with the printed `TEST_ORDER_SEED`; flakiness with
    `./build.sh --target Stability --repeat 3 --stability-projects <project>`. Say what could not

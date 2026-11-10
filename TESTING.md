@@ -2,7 +2,7 @@
 
 What could go wrong in production, and which tests would catch it. Use it to spot gaps: a risk
 with no test, or a risk tested only at one slow level. When you add a behaviour or a test, update
-the row. How to run each layer and the quality gates: [`CLAUDE.md`](CLAUDE.md#commands).
+the row. How to run each layer and the quality gates: [`docs/commands.md`](docs/commands.md).
 
 Layers: **U** unit (`tests/Orders.UnitTests`), **C** contract (`tests/Orders.ContractTests`),
 **I** integration (`tests/Orders.IntegrationTests`, Docker), **E** E2E (`tests/Orders.E2E`, Docker +
@@ -85,9 +85,11 @@ row filled in; an empty cell is a gap, "n/a" a decision.
 - Multiple API replicas: sessions are in-memory (a second replica would not know the session).
   Orders no longer depend on one replica: the database reservation decides who charges, tested
   with two API instances on one database (`PaidOrderDurabilityTests`).
-- Charges whose outcome is unknown (provider timeout, crash after the charge) are settled by a
-  retry with the same reference, which is safe only with provider-side idempotency: **FAKED** here,
-  UNVERIFIED for a real provider. An order nobody retries stays Pending (logged by id); there is no
-  automatic reconciliation job.
+- A crash or failed save after the charge leaves the order Pending; a retry with the same key
+  settles it with the same reference, which is safe only with provider-side idempotency: **FAKED**
+  here, UNVERIFIED for a real provider. An order nobody retries stays Pending (logged by id).
+- A provider timeout is final: the order is saved as PaymentFailed (decision: timeouts stay
+  not-paid) and a retry replays it without charging again. If the provider did charge before the
+  timeout, the customer paid for a failed order. There is no automatic reconciliation job.
 - A real HTTPS deployment end to end (ingress, certificates, real domains) is not tested; the
   URLs in `deploy/` are placeholders.

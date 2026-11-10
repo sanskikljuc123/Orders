@@ -268,4 +268,23 @@ Verify the package and property names for the version you install.
   the chart in a throwaway cluster (kind) where the environment allows.
 - **NUKE quotes interpolated values with spaces as one argument** (`$"cmd{flags}"` with
   `flags = " --x"` breaks). Write the full command per case.
+- **Charge (or any external side effect) before saving is a design bug, not a test gap.** If the
+  save fails after an approved charge, the money is gone and a retry charges again. Reserve the
+  record first (Pending, unique key in the database), then call out, then complete it only while
+  still Pending. Test the failure point deterministically: a fake that wraps the real store and
+  fails one call (unit), a database trigger that fails one row (integration).
+- **Every negative test needs a positive control.** Five "returns 401" token tests passed while
+  the valid token was refused too (wrong test setup); only the control test showed it. Add the
+  "valid case is accepted" test next to the rejections.
+- **Don't wait for time, construct it.** An expired JWT is minted with `exp` in the past (test RSA
+  key the API trusts), not obtained by waiting out the lifetime plus clock skew.
+- **Framework settings are invisible to coverage and mutation tools.** Startup fail-open defaults
+  (no auth / fake payment / in-memory store when a setting is missing), `ValidateAudience = false`,
+  DI lifetimes (a non-shared lock charged three times while all tests stayed green): test them
+  through the real host (WebApplicationFactory, a second instance on the same database).
+- **A check that never fails proves nothing.** For every new gate or guard (hook, CI check,
+  analyzer setting), make it fail once on purpose: an `||` fallback once turned a blocking hook
+  into a silent pass, and an `.editorconfig` severity did not raise analyzer rules.
+- **Your own review misses things.** Several of these were found by an outside review or the
+  `coverage-review` agent, not by the author. Get an independent review before calling it done.
 

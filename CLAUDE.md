@@ -17,7 +17,7 @@ test platform. How to run it: [`README.md`](README.md). Which test covers which 
 ## Definition of done
 - [ ] `dotnet build` green; the affected test projects green, real summary shown.
 - [ ] New behaviour has a test that goes red when the behaviour is broken (mutation-checked).
-- [ ] `TESTING.md` row updated; "How it works now" below updated if behaviour changed.
+- [ ] `TESTING.md` row updated; [`docs/how-it-works.md`](docs/how-it-works.md) updated if behaviour changed.
 - [ ] New or changed API endpoint: its row in the `TESTING.md` endpoint matrix is filled in, its
       responses are declared with `.Produces(...)` and `docs/api/openapi.v1.json` is updated
       (`EndpointAuthTests` already fails for any endpoint without a login unless it is listed as public).
@@ -55,9 +55,13 @@ One responsibility each; they analyse and report, they never edit files, commit 
   requirements, missing scenarios, weak/redundant/flaky tests, automation opportunities, regression suites.
 - `failure-analysis` (may run tests, read CI logs): classification, root cause with evidence,
   reproduction, bug report.
+- `pr-review` (may run tests): before a PR, what CI cannot judge: tests for every changed
+  behaviour, nothing weakened, docs/contract in sync, no secrets or attribution, an honest
+  description -> READY / NOT READY. Used by the `pr-ready` skill (`/pr-ready`).
 
 **Workflow:** new or changed behaviour -> `requirement-analysis` -> write the tests (`test-setup`
-skill) -> `coverage-review` on the diff before the PR -> CI or nightly red -> `failure-analysis`.
+skill) -> `coverage-review` on the diff -> `/pr-ready` (gates, `pr-review`, then push after an OK)
+-> CI or nightly red -> `failure-analysis`.
 
 **Shared rules (all three agents apply these; this is the only copy):**
 - Prioritise by 1. user impact, 2. business impact (money, lost orders), 3. security impact,
@@ -91,6 +95,10 @@ skill) -> `coverage-review` on the diff before the PR -> CI or nightly red -> `f
   no `Claude-Session: ...` links, no "Generated with Claude Code" lines.
 - Ask before pushing. This rule wins over the cloud environment's stop hook that asks to push
   unpushed commits.
+- Enforced, not only written down: `.claude/settings.json` turns Claude Code's attribution off and
+  a PreToolUse hook (`.claude/hooks/block-ai-attribution.py`) refuses such commits; the NUKE target
+  `Conventions` (part of `Test`, so every CI run) fails on attribution in any commit after
+  `33a83da`. Three commits from 2026-11-09, before the rule, keep theirs (history not rewritten).
 
 ## Build / CI / deploy
 - NUKE (`build/`) is the single entry point; GitHub Actions only calls `./build.sh` / `./build.cmd`.
@@ -104,141 +112,13 @@ skill) -> `coverage-review` on the diff before the PR -> CI or nightly red -> `f
   imported only for local runs and tests, never in `aspire publish`. A deployment needs its own
   realm: no test users, exact redirect URIs, HTTPS required, brute-force protection on.
 
-## How it works now (keep in sync when you change it)
-- **Production realm:** `deploy/realms/orders-realm.prod.json` (no users, `sslRequired: all`, exact
-  redirect and post-logout URIs, brute-force protection, code flow + PKCE only), guarded by
-  `ProductionRealmTests`. Aspire's publisher cannot carry a realm import (it breaks
-  `aspire publish`), so NUKE Publish adds `deploy/chart-extras`: a Helm post-install/upgrade Job
-  that creates the realm with `kcadm.sh` if missing (never overwrites). Its Keycloak image must
-  match the chart's (Publish fails otherwise).
-- **Keycloak in the chart** runs `start` (production mode) with `KC_HTTP_ENABLED`,
-  `KC_PROXY_HEADERS=xforwarded` and `KC_HOSTNAME` (behind a TLS-terminating ingress). Without them
-  it exits with "Key material not provided to setup HTTPS".
-- **API login:** secure by default (HTTPS metadata, `form_post`, Secure cookies). Plain-http
-  settings only via `Auth:AllowInsecureHttp` in `appsettings.Development.json` (local runs,
-  tests); guarded by `AuthSecurityOptionsTests`. Bearer tokens must carry the audience
-  `orders-api` (audience mapper on `orders-web` in both realms); tokens for other clients of the
-  realm are refused (CA5404 found this). Logout ends the app cookie and the Keycloak
-  session. Sessions are stored server-side (`SessionStore`), so logout revokes the cookie.
-- **Orders:** stored as `Pending` before the charge, then completed to `Paid`/`PaymentFailed` only
-  while still Pending (`OrderService`, `IOrderRepository.TryAddAsync`/`CompletePendingAsync`). The
-  unique (UserId, IdempotencyKey) index decides which request owns a key, also across instances;
-  the in-process lock is only a fast path. Failure before the charge: 503 "Order not placed,
-  nothing charged". Failure saving the result: 202 + the Pending order (logged by id, never the
-  key). A repeated key returns the first order (`Idempotent-Replayed: true`); a Pending one is
-  settled by charging its reference again; the same key with a different product or quantity is
-  422 (IETF Idempotency-Key draft). The UI keeps the key after 202/5xx so a retry is safe.
-  Pending orders are not cached. Responses never contain `userId` or the key.
-- **Payment:** contract and client in `src/Orders.Shared/Payments.cs` (shared with the fake). The
-  order id is sent as the provider's `Idempotency-Key` (one charge per reference): **FAKED** for this
-  example, modelled on Stripe's documentation, marked in the fake's README and above every test
-  that relies on it.
-  Anything but a clear approval (HTTP error, unreadable body, unreachable, timeout after
-  `Payment:TimeoutSeconds`, default 10) means not paid and is logged as a warning.
-- **Validation messages** are explicit English text, independent of the server culture.
-- **Startup:** outside Development the API refuses to start without `Auth:Authority`,
-  `Payment:BaseUrl` and `ConnectionStrings:ordersdb` (it would otherwise run without login, mark
-  orders Paid without charging, keep orders in memory). Development keeps those defaults.
-  Tests that start "Production" use `ApiInEnvironment` (all settings, the test PostgreSQL).
-- **Security gates:** every restore fails on a High/Critical NuGet advisory, direct or transitive
-  (`Directory.Build.props`, NuGet audit); every build fails on a .NET security analyzer finding
-  (`AnalysisModeSecurity=All`, analyzer warnings are errors; suppress only in code with a reason).
-  The `Images` target scans each image with Trivy (pinned in `build/Build.cs`, checksum-verified)
-  before any push; fixable HIGH/CRITICAL fail it. Images use the chiseled .NET base
-  (`ContainerFamily=noble-chiseled`: no apt, no shell, non-root user 1654, port 8080); the full
-  Ubuntu base shipped apt with a fixable HIGH CVE that the scan refused on its first run. Dependabot (`.github/dependabot.yml`) opens weekly
-  update PRs. No CodeQL: it needs a paid licence for private repositories.
-- **API contract:** `docs/api/openapi.v1.json` (OpenAPI 3.1, generated by `Microsoft.AspNetCore.OpenApi`
-  from the endpoints' `.Produces(...)` declarations). Served at `/openapi/v1.json` in Development
-  only. `OpenApiContractTests` fails when the API's document differs from the committed one;
-  `/login` and `/logout` are browser redirects and excluded from it.
-
-## Commands
-Run the app and the manual smoke check: [`README.md`](README.md).
-
-**Tests** (what each needs)
-- Unit: `dotnet test tests/Orders.UnitTests` (nothing) | Contract: `dotnet test tests/Orders.ContractTests` (nothing)
-- Integration: `dotnet test tests/Orders.IntegrationTests` (Docker)
-- E2E: `dotnet test tests/Orders.E2E` (Docker + Playwright browser:
-  `pwsh tests/Orders.E2E/bin/Debug/net10.0/playwright.ps1 install`); `--filter Category=smoke` for smoke only
-- `dotnet test` alone runs all four, so it needs Docker and the browser too.
-- Everything CI runs on a pull request: `./build.sh --target Test Helm Images` (Linux), plus
-  `.\build.cmd --target UnitTests ContractTests` on Windows (job `windows`).
-- API contract changed on purpose: `UPDATE_OPENAPI_SNAPSHOT=1 dotnet test tests/Orders.IntegrationTests
-  --filter FullyQualifiedName~OpenApiContractTests`, review and commit `docs/api/openapi.v1.json`.
-- Test order is random in all four projects (`tests/TestSupport/RandomTestOrder.cs`; E2E scenarios
-  still run one at a time, see `tests/Orders.E2E/AssemblyInfo.cs`). The
-  seed is printed ("Random test order seed: N"); replay a failing order with `TEST_ORDER_SEED=N`.
-
-**Quality gates**
-- Coverage: `CoverageGate` merges the unit + contract + integration reports (generated migrations
-  excluded via `coverlet.runsettings`): all production code >= 90% branches, each critical class
-  (`CriticalClasses` in `build/Build.cs`) >= 80% lines and branches. Summary in
-  `TestResults/coverage-summary.md` and the GitHub job summary. Raise floors with real tests
-  (`--total-branch-floor`, `--critical-branch-floor`); never write tests just to hit them.
-- Mutation: `./build.sh --target Mutation` runs `stryker/api.json` (OrderService, SessionStore,
-  CreateOrderValidator; break below 85%) and `stryker/shared.json` (payment client; break below
-  90%). Reports in `TestResults/mutation/*/reports/`. Known survivors (SessionStore expiry boundary
-  and cache duration) are not observable: the cookie handler checks expiry itself.
-- Flaky / order-dependent: `./build.sh --target Stability --repeat 3 [--stability-projects ...]`
-  runs each project N times in a new order and lists tests that failed in some runs
-  (`TestResults/stability-summary.md`). With Orders.E2E, run `InstallBrowser` first.
-- Every test target writes passed/failed/skipped and failed test names to the GitHub job summary.
-- Nightly (`.github/workflows/ci-nightly.yml`): Stability for all four projects, Mutation, DeploySmoke.
-
-**Deploy**
-- Helm chart (Helm 3.22.1 on PATH): `./build.sh --target Helm [--environment dev]` runs
-  `aspire publish -o k8s-artifacts` + `helm lint` + `helm template`. `k8s-artifacts/` is
-  git-ignored because it contains generated passwords; never commit it.
-- Images: `./build.sh --target Images` builds `orders-api` and `orders-payment` into local Docker
-  (.NET SDK container support, no Dockerfile) and scans them with Trivy (Linux x64; elsewhere, or
-  with `--scan-images false`, it warns and skips, and `--push-images` then refuses). CI on main adds `--push-images true` and pushes to
-  `ghcr.io/sanskikljuc123/<image>:<SemVer>` with `GITHUB_TOKEN`. Test the push path with
-  `./build.sh --target Images --push-images true --image-registry localhost:5000` and a local `registry:2`.
-- Deployment smoke (Docker + kind + kubectl + helm): `./build.sh --target DeploySmoke` installs the
-  chart in a throwaway kind cluster and checks the realm Job (HTTPS-only, no users) and API /health.
-
-## Known pitfalls
-- **NUKE quoting:** never interpolate a value that contains spaces (e.g. `$" --flag"`) into
-  `DotNet($"...")` / tool calls; NUKE quotes it as ONE argument. Write the full command per case.
-  (Broke `InstallBrowser` and the ghcr.io push.)
-- **Tool restore and the package cache:** a cached package hides restore failures. Before trusting
-  a `dotnet-tools.json` change, delete `~/.nuget/packages/<tool>` and restore again. (dotnet-stryker
-  next to aspire.cli failed only on clean machines: "package contains aspire".)
-- **Stryker** silently exits with code 1 unless break <= low <= high.
-- **Coverage gate dropped** after new code: add the missing test, never lower the floor.
-- **Chart without passwords:** the generated chart's secrets are empty; Keycloak then exits
-  (code 2) and the realm Job times out. `deploy/chart-extras/templates/required-secrets.yaml` now
-  stops any install/render without them (or with different Postgres/API passwords); the Helm
-  target checks that guard. DeploySmoke and Helm generate throwaway ones; a real deploy passes
-  them with `--set`, see `deploy/values.dev.yaml`.
-- **OpenAPI and record defaults:** an optional constructor parameter like `DateTimeOffset CreatedAt
-  = default` makes the OpenAPI document fail with a 500 ("could not be converted to
-  System.DateTimeOffset"). Records used in responses take all parameters explicitly.
-- **Analyzer severity:** `AnalysisModeSecurity=All` sets each rule's severity itself, so an
-  `.editorconfig` category severity does not raise it, and a category severity alone does not turn
-  on rules that are off by default. Use `CodeAnalysisTreatWarningsAsErrors` (checked with MD5, a
-  disabled audience check and `new Random()`: all three fail the build).
-- **First NUKE run** can rewrite `build/_build.csproj`; check `git diff` and revert what you didn't intend.
-
-## Cloud dev container (limitations)
-- Docker: after a container restart, delete a stale `/var/run/docker.pid` before starting dockerd.
-  If dockerd then fails with "timeout waiting for containerd to start", kill the leftover
-  `containerd` and remove `/var/run/docker/containerd/containerd.pid` first.
-- Downloaded tool binaries (e.g. Trivy) may not be run here; the image scan is proven by CI.
-  Docker Hub can rate-limit (429) and ghcr.io blob downloads are blocked.
-- No nested Kubernetes: `DeploySmoke` runs only in CI (nightly).
-- Plain `dotnet run --project src/Orders.AppHost` aborts (exit 134); use `dotnet aspire run`.
-- Playwright download blocked: `E2E_CHROMIUM_PATH=<installed chrome>` and `E2E_VIDEO=0` (local-only;
-  CI installs the matching browser). No `playwright-cli` (see Gherkin conventions).
-
-## Open points and known limitations
-- PLACEHOLDER URLs to replace before a real deployment: `https://orders.example.com` (prod realm
-  redirect/logout URIs), `https://auth.example.com` (`Auth__Authority`, `keycloak_hostname` in
-  `deploy/values.dev.yaml`). Only `values.dev.yaml` exists; image tags are passed with `--set`.
-- GHCR packages are private by default: make them public or give the cluster a pull secret.
-- One API replica only for sessions: they are in-memory (a restart logs users out); a distributed
-  L2 cache would lift this. Orders are safe across replicas (database reservation).
-- The chart installs and starts in a throwaway kind cluster (`DeploySmoke`, nightly, green since
-  2026-11-10) but has never run in a real cluster with TLS ingress, real domains and certificates.
-- The payment provider contract is an UNVERIFIED ASSUMPTION (`src/FakePaymentService/README.md`).
+## Reference (read when the task needs it)
+- [`docs/how-it-works.md`](docs/how-it-works.md): current behaviour and design (realm, login, orders,
+  payment, startup, security gates, API contract) and open points. Read before changing behaviour;
+  update it when behaviour changes.
+- [`docs/commands.md`](docs/commands.md): every test layer, quality gate (coverage, mutation,
+  stability, conventions) and deploy command.
+- [`docs/pitfalls.md`](docs/pitfalls.md): known pitfalls and cloud-container limits. Read when a
+  build, test or CI run fails.
+- Essentials: build `dotnet build`; tests `dotnet test tests/Orders.<Layer>Tests` (integration and
+  E2E need Docker); everything a PR runs: `./build.sh --target Test Helm Images`; prepare a PR: `/pr-ready`.

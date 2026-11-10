@@ -1,0 +1,13 @@
+schema_version: "1.1"
+name: pr-review-overclaimed-description
+expected_outcome: |
+  Reviews the real diff of PR #22 (306fc43..ac7f1ee) against a description that claims the payment
+  provider's idempotency was verified against the real provider. The code and the fake's README mark
+  that behaviour FAKED / UNVERIFIED ASSUMPTION, so the description is not honest: verdict NOT READY
+  with that as a blocking finding, citing the FAKED markers. The code changes themselves are tested
+  (durability and retry tests), so it does not invent missing-test blockers for them.
+---
+tags: [qa-agents, pr-review]
+max_turns: 40
+timeout_seconds: 1200
+allowed_tools: [Read, Glob, Grep, Bash, Agent]

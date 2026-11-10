@@ -1,0 +1,12 @@
+schema_version: "1.1"
+name: pr-review-dependency-bump-ready
+expected_outcome: |
+  Control case. Reviews the Dependabot PR #18 (merged as c2b2f6e; diff c2b2f6e^1..c2b2f6e): one version change in
+  Directory.Packages.props, no behaviour change. Verdict READY (CI's full test run is the check that
+  matters, which it may mention). It does not invent blockers such as missing tests, TESTING.md rows
+  or OpenAPI changes for a version bump.
+---
+tags: [qa-agents, pr-review]
+max_turns: 30
+timeout_seconds: 900
+allowed_tools: [Read, Glob, Grep, Bash, Agent]

@@ -142,6 +142,10 @@ plainly, give the exact command, and don't report it as passing.
 ## Step 8 — Self-review before saying "done"
 
 - [ ] Each test fails if I break the behaviour it claims to cover (mutation-checked).
+- [ ] Every group of negative tests has a positive control (the valid case passes), so the
+      negatives can't pass for the wrong reason.
+- [ ] Side effects outside the process (payment, e-mail) happen only after the record is stored;
+      the failure points are tested (see `references/dotnet.md` §8).
 - [ ] Every test asserts specific expected values / messages.
 - [ ] No `Thread.Sleep` / `Task.Delay` waits; Playwright auto-waiting and `Expect(...)` only.
 - [ ] No real external network in unit tests; no real third-party services anywhere.
