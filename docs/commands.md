@@ -30,7 +30,8 @@ How to run every test layer, quality gate and deployment check. Running the app:
   CreateOrderValidator, UserIds against the unit tests; break below 85%), `stryker/shared.json`
   (payment client; break below 90%) and `stryker/api-integration.json` (OrderEndpoints,
   EfOrderRepository against the integration tests; break below 85%; needs Docker, about 20 min).
-  Reports in `TestResults/mutation/*/reports/`. Known survivors: SessionStore expiry boundary and
+  All configs run even if one fails; the target then fails naming them. Reports in
+  `TestResults/mutation/*/reports/`. Known survivors: SessionStore expiry boundary and
   cache duration (not observable: the cookie handler checks expiry itself) and the 503 problem
   `title` (nothing reads it; the `detail` is asserted).
   `api-integration` uses `"coverage-analysis": "off"`: endpoints are mapped while the shared test
