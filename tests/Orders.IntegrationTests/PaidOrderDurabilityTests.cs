@@ -109,6 +109,7 @@ public class PaidOrderDurabilityTests
         Assert.Equal(HttpStatusCode.ServiceUnavailable, first.StatusCode);
         Assert.Contains("Nothing was charged", await first.Content.ReadAsStringAsync());
         Assert.DoesNotContain("test: INSERT fails", await first.Content.ReadAsStringAsync());   // no internals leak
+        Assert.Contains(_fixture.Logs.Events, e => e.Contains("Order not placed") && e.Contains("test: INSERT fails"));   // ...but operators see the cause
         Assert.Empty(ChargedReferences());
         Assert.Empty(await RowsAsync(product));
 

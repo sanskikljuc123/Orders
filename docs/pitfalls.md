@@ -32,6 +32,8 @@ Problems this project has already hit, and the cloud dev container's limits. Che
   `containerd` and remove `/var/run/docker/containerd/containerd.pid` first.
 - Downloaded tool binaries (e.g. Trivy) may not be run here; the image scan is proven by CI.
   Docker Hub can rate-limit (429) and ghcr.io blob downloads are blocked.
+- No .NET SDK preinstalled and `builds.dotnet.microsoft.com` blocked (dotnet-install.sh fails):
+  `apt-get install -y dotnet-sdk-10.0` (Ubuntu's package, same 10.0.1xx band as `global.json`).
 - No nested Kubernetes: `DeploySmoke` runs only in CI (nightly).
 - Plain `dotnet run --project src/Orders.AppHost` aborts (exit 134); use `dotnet aspire run`.
 - Playwright download blocked: `E2E_CHROMIUM_PATH=<installed chrome>` and `E2E_VIDEO=0` (local-only;

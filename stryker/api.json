@@ -2,7 +2,7 @@
   "stryker-config": {
     "project": "Orders.Api.csproj",
     "test-projects": ["../tests/Orders.UnitTests/Orders.UnitTests.csproj"],
-    "mutate": ["**/OrderService.cs", "**/SessionStore.cs", "**/CreateOrderValidator.cs"],
+    "mutate": ["**/OrderService.cs", "**/SessionStore.cs", "**/CreateOrderValidator.cs", "**/UserIds.cs"],
     "reporters": ["progress", "cleartext", "html", "json"],
     "thresholds": { "high": 95, "low": 90, "break": 85 }
   }

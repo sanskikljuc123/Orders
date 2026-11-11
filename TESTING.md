@@ -38,7 +38,7 @@ browser), **N** nightly only (`.github/workflows/ci-nightly.yml`).
 | Internal user ids leak to callers | I `Order_response_has_exactly_the_fields_callers_read` (no `userId`), `Key_is_not_returned_to_the_client` |
 | Anonymous or forged requests accepted (incl. a new endpoint someone forgot to protect) | I `EndpointAuthTests` (every endpoint found in the app, except the public list, returns 401; an order without a token is not charged), `Request_without_token_returns_401`, `Request_with_garbage_token_returns_401` |
 | Expired, unsigned, wrongly signed or foreign tokens accepted | I `TokenValidationTests` (minted tokens: expired, no expiry, other issuer, other audience, other key, plus a valid control), `AuthSecurityOptionsTests.Expired_unsigned_or_foreign_tokens_are_rejected_in_every_environment` (same settings in Production) |
-| A user sees another user's orders | U `OrderStoreTests`; I `User_cannot_fetch_another_users_order`, `Users_list_contains_only_their_own_orders`; E "A user never sees another user's orders" (both directions) |
+| A user sees another user's orders | U `OrderStoreTests`; I `User_cannot_fetch_another_users_order`, `Owners_cached_order_is_not_served_to_another_user` (the owner's read is cached first), `Users_list_contains_only_their_own_orders`; E "A user never sees another user's orders" (both directions) |
 | Logout leaves the user signed in (app or Keycloak) | E "Customer who logs out is asked to log in again", "… can no longer place an order", "… must enter their password again" |
 | A copied cookie still works after logout | U `SessionStoreTests`; I `Login_cookie_sessions_live_on_the_server_so_logout_can_revoke_them`; E "A copy of the session cookie stops working after logout" |
 | A token issued to another application of the realm is accepted | I `Token_issued_to_another_client_of_the_realm_returns_401` (real `admin-cli` token), `AuthSecurityOptionsTests` (audience required); U `ProductionRealmTests.Web_client_tokens_carry_the_api_audience` |
@@ -61,7 +61,7 @@ row filled in; an empty cell is a gap, "n/a" a decision.
 |---|---|---|---|---|---|
 | `POST /orders` | 401, not charged (`EndpointAuthTests`) | n/a (always the caller's) | 201, `Location`, 202 + `Location` for a Pending order (`PaidOrderDurabilityTests`), exact fields without `userId` (`Order_response_has_exactly_the_fields_callers_read`), Paid / PaymentFailed, charge, idempotency (`IdempotencyTests`) | 400 per field (`Invalid_order_…`), cut-off / empty / wrong-type JSON 400 (`Unreadable_order_body_…`), text/plain 415, key reused for another order 422, order not placed (store down) 503 — none charged | n/a |
 | `GET /orders` | 401 | only own orders (U I E) | oldest first (`Users_list_shows_orders_oldest_first`) | n/a | new user gets `[]` (`NewUserTests`) |
-| `GET /orders/{id}` | 401 | 404 (`User_cannot_fetch_another_users_order`) | fetched from `Location`; a Pending order is not cached (`Pending_order_read_by_id_shows_its_final_status_once_completed`) | not a Guid → 404 | unknown id → 404 |
+| `GET /orders/{id}` | 401 | 404 (`User_cannot_fetch_another_users_order`, also after the owner's read was cached: `Owners_cached_order_is_not_served_to_another_user`) | fetched from `Location`; a Pending order is not cached (`Pending_order_read_by_id_shows_its_final_status_once_completed`) | not a Guid → 404 | unknown id → 404 |
 | `GET /me` | 401 | n/a | name (`Me_returns_the_signed_in_users_name`) | n/a | n/a |
 | `GET /health` | public on purpose | n/a | `Healthy`: E2E startup, N `DeploySmoke` | n/a | n/a |
 | `GET /login`, `/logout` | public on purpose | n/a | E `Login.feature`, `Logout.feature` | n/a | n/a |
@@ -76,7 +76,7 @@ row filled in; an empty cell is a gap, "n/a" a decision.
 | Chart valid but the system does not start (e.g. Keycloak without TLS settings) | N `DeploySmoke` (kind install, hook Job, API /health) |
 | Images not built or not pushed | `Images` target on every pull request; push on main |
 | Tests pass only in one order or are flaky | random order on every run, E2E included; N `Stability` (each project 3 times, a new order each time) |
-| Tests pass but would not catch a bug | N `Mutation` (Stryker; break thresholds in `stryker/*.json`) |
+| Tests pass but would not catch a bug | N `Mutation` (Stryker; break thresholds in `stryker/*.json`; `api-integration` mutates the endpoints and the PostgreSQL repository against the integration tests) |
 | Coverage quietly drops on critical code | `CoverageGate` (merged report, per-class floors) on every pull request |
 
 ## Known gaps

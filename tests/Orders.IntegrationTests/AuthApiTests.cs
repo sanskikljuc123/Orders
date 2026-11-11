@@ -61,6 +61,23 @@ public class AuthApiTests
         Assert.Equal(HttpStatusCode.OK, asAna.StatusCode);
     }
 
+    // Paid orders are cached per user and order id. The owner reads first, so a cache key
+    // without the user would serve the cached order to the next caller.
+    [Fact]
+    public async Task Owners_cached_order_is_not_served_to_another_user()
+    {
+        var ana = await _fixture.CreateClientAsAsync("ana");
+        var bob = await _fixture.CreateClientAsAsync("bob");
+        var created = await ana.PostAsJsonAsync("/orders", new CreateOrderRequest($"Anas order {Guid.NewGuid():N}", 1));
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        var asAna = await ana.GetFromJsonAsync<Order>(created.Headers.Location);
+        var asBob = await bob.GetAsync(created.Headers.Location);
+
+        Assert.Equal(OrderStatus.Paid, asAna!.Status);   // final state: this read was cached
+        Assert.Equal(HttpStatusCode.NotFound, asBob.StatusCode);
+    }
+
     [Fact]
     public async Task Users_list_contains_only_their_own_orders()
     {
