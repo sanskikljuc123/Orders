@@ -51,7 +51,7 @@ contract are for local use only (see `CLAUDE.md` and `src/FakePaymentService/REA
 ## Tests and build
 
 What each risk is tested by: [`TESTING.md`](TESTING.md). Commands and quality gates (coverage,
-mutation, stability, deployment smoke): [`CLAUDE.md`](CLAUDE.md).
+mutation, stability, deployment smoke): [`docs/commands.md`](docs/commands.md).
 
 ```bash
 ./build.sh --target Test Helm Images

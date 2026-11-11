@@ -276,9 +276,21 @@ class Build : NukeBuild
             // aspire.cli from the root manifest fails ("package contains aspire").
             // api-integration mutates the endpoints and the PostgreSQL repository against the
             // integration tests: needs Docker and takes about 20 minutes.
+            // Every config runs even when an earlier one fails, so one night still reports them all.
             DotNet("tool restore", RootDirectory / "stryker");
+            var failed = new List<string>();
             foreach (var config in new[] { "api", "shared", "api-integration" })
-                DotNet($"stryker --config-file {config}.json --output {ResultsDir / "mutation" / config}", RootDirectory / "stryker");
+            {
+                try
+                {
+                    DotNet($"stryker --config-file {config}.json --output {ResultsDir / "mutation" / config}", RootDirectory / "stryker");
+                }
+                catch (ProcessException)
+                {
+                    failed.Add(config);
+                }
+            }
+            Assert.True(failed.Count == 0, $"Mutation failed (below its break threshold or did not run) for: {string.Join(", ", failed)}");
         });
 
     Target Publish => _ => _
