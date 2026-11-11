@@ -1,0 +1,11 @@
+{
+  "stryker-config": {
+    "project": "Orders.Api.csproj",
+    "test-projects": ["../tests/Orders.IntegrationTests/Orders.IntegrationTests.csproj"],
+    "mutate": ["**/OrderEndpoints.cs", "**/EfOrderRepository.cs"],
+    "concurrency": 2,
+    "coverage-analysis": "off",
+    "reporters": ["progress", "cleartext", "html", "json"],
+    "thresholds": { "high": 95, "low": 90, "break": 85 }
+  }
+}

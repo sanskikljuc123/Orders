@@ -274,8 +274,10 @@ class Build : NukeBuild
             // Run nightly (ci-nightly.yml); a few minutes, so not on every pull request.
             // Stryker has its own tool manifest (stryker/.config): restoring it together with
             // aspire.cli from the root manifest fails ("package contains aspire").
+            // api-integration mutates the endpoints and the PostgreSQL repository against the
+            // integration tests: needs Docker and takes about 20 minutes.
             DotNet("tool restore", RootDirectory / "stryker");
-            foreach (var config in new[] { "api", "shared" })
+            foreach (var config in new[] { "api", "shared", "api-integration" })
                 DotNet($"stryker --config-file {config}.json --output {ResultsDir / "mutation" / config}", RootDirectory / "stryker");
         });
 

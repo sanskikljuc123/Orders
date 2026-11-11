@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -57,7 +58,9 @@ public class IdempotencyTests
         var reused = await ana.SendAsync(Post(new CreateOrderRequest(product, 5), key));
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, reused.StatusCode);
-        Assert.Contains("'Idempotency-Key' was already used for a different order.", await reused.Content.ReadAsStringAsync());
+        var errors = (await reused.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errors");
+        Assert.Equal("'Idempotency-Key' was already used for a different order.",
+            errors.GetProperty("Idempotency-Key")[0].GetString());   // under the header's name, so clients can map it
         Assert.False(reused.Headers.Contains("Idempotent-Replayed"));
         A.CallTo(() => _fixture.Payment.ChargeAsync(A<decimal>._, A<Guid>._)).MustHaveHappenedOnceExactly();   // the first order only
         Assert.Equal(1, await RowsWithProductAsync(product));

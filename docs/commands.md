@@ -27,9 +27,16 @@ How to run every test layer, quality gate and deployment check. Running the app:
   `TestResults/coverage-summary.md` and the GitHub job summary. Raise floors with real tests
   (`--total-branch-floor`, `--critical-branch-floor`); never write tests just to hit them.
 - Mutation: `./build.sh --target Mutation` runs `stryker/api.json` (OrderService, SessionStore,
-  CreateOrderValidator; break below 85%) and `stryker/shared.json` (payment client; break below
-  90%). Reports in `TestResults/mutation/*/reports/`. Known survivors (SessionStore expiry boundary
-  and cache duration) are not observable: the cookie handler checks expiry itself.
+  CreateOrderValidator, UserIds against the unit tests; break below 85%), `stryker/shared.json`
+  (payment client; break below 90%) and `stryker/api-integration.json` (OrderEndpoints,
+  EfOrderRepository against the integration tests; break below 85%; needs Docker, about 20 min).
+  Reports in `TestResults/mutation/*/reports/`. Known survivors: SessionStore expiry boundary and
+  cache duration (not observable: the cookie handler checks expiry itself) and the 503 problem
+  `title` (nothing reads it; the `detail` is asserted).
+  `api-integration` uses `"coverage-analysis": "off"`: endpoints are mapped while the shared test
+  fixture starts, outside any test, so per-test coverage reported those mutants as survivors even
+  though the tests catch them. Code to mutate goes in its own file: Stryker's `{a..b}` spans are
+  character offsets, not lines.
 - Flaky / order-dependent: `./build.sh --target Stability --repeat 3 [--stability-projects ...]`
   runs each project N times in a new order and lists tests that failed in some runs
   (`TestResults/stability-summary.md`). With Orders.E2E, run `InstallBrowser` first.
